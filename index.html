@@ -3,14 +3,10 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
-<meta http-equiv="Pragma" content="no-cache"/>
-<meta http-equiv="Expires" content="0"/>
-<title>California Hosting Capacity &amp; Siting</title>
+<title>Ohio Hosting Capacity &amp; Siting</title>
 <link rel="stylesheet" href="https://js.arcgis.com/4.30/esri/themes/light/main.css"/>
 <script src="https://js.arcgis.com/4.30/"></script>
-<!-- California utility service-territory polygons. Sets window.MIDATL_TERR (utilKey -> GeoJSON geometry). -->
-<script src="ca_territories.js"></script>
+<!-- OHIO build: per-utility service-territory polygons are loaded from ./data/<key>_territory.geojson at runtime into window.MIDATL_TERR (see loadOhioTerritories()); missing files fail gracefully. -->
 <style>
   :root{
     --navy:#1b2a4a; --navy2:#24385f; --slate:#3b5380; --slate-l:#e8edf6;
@@ -81,8 +77,8 @@
 <div id="app">
   <div id="side">
     <div id="brand">
-      <h1>California Hosting Capacity &amp; Siting</h1>
-      <p>SCE &middot; LADWP &middot; PG&amp;E &middot; SDG&amp;E &middot; SMUD &middot; Load + Storage &middot; baked ICA data</p>
+      <h1>Ohio Hosting Capacity &amp; Siting</h1>
+      <p>4 utilities &middot; Load + Storage (BESS) &middot; PJM &middot; HB15 maps</p>
     </div>
     <div id="tabs">
       <button data-tab="layers" class="on">Layers</button>
@@ -94,13 +90,14 @@
 
       <!-- ============ LAYERS ============ -->
       <div class="panel on" id="p-layers">
-        <!-- California-only tool: state selector hidden but kept in the DOM so the state-scoped engine still works. -->
-        <select id="state" style="display:none"><option value="CA">California</option></select>
-
         <h2 class="sec">Utility</h2>
         <label class="fld">Utility</label>
         <select id="util">
           <option value="all">All utilities</option>
+          <option value="aep">AEP Ohio</option>
+          <option value="firstenergy">FirstEnergy (Ohio Edison / CEI / Toledo Edison)</option>
+          <option value="aes">AES Ohio</option>
+          <option value="duke">Duke Energy Ohio</option>
         </select>
         <div class="hint" id="utilHint"></div>
 
@@ -111,18 +108,18 @@
           <button data-mode="load">Load</button>
           <button data-mode="stor">BESS / PV</button>
         </div>
-        <div class="hint">Load uses each utility's ICA load hosting-capacity layer; storage uses a published BESS layer where one exists. SCE and LADWP publish no native BESS layer, so their PV/generation hosting capacity is shown as a labeled storage proxy. Values are available capacity in <b>MW</b>. In <b>Combined</b>, each active utility's layer is colored by available MW (average of Load &amp; storage where both exist).</div>
+        <div class="hint">Load uses each utility's load hosting-capacity layer; storage uses the published battery/BESS layer where one exists. <b>FirstEnergy</b> publishes a native battery (BESS) layer; <b>AEP Ohio</b>, <b>AES Ohio</b> and <b>Duke Energy Ohio</b> have no published BESS layer, so their generation hosting-capacity layer is used as a storage proxy and every popup says so. Values are available capacity in <b>MW</b>. In <b>Combined</b>, each active utility's layer is shown colored by available MW.</div>
         <div class="chk" style="display:none"><input type="checkbox" id="netOn"/><label for="netOn">Secondary-network areas</label></div>
 
         <h2 class="sec">Capacity legend (MW)</h2>
         <div id="legendCap"></div>
-        <div class="chk" style="display:none"><input type="checkbox" id="bgeSuitOn"/><label for="bgeSuitOn">storage suitability</label></div>
-        <div class="chk" style="display:none"><input type="checkbox" id="pecoDerOn"/><label for="pecoDerOn">DER viability</label></div>
+        <div class="chk" style="display:none"><input type="checkbox" id="bgeSuitOn"/><label for="bgeSuitOn">Storage suitability index</label></div>
+        <div class="chk" style="display:none"><input type="checkbox" id="pecoDerOn"/><label for="pecoDerOn">DER interconnection viability</label></div>
 
         <h2 class="sec">Service territory</h2>
         <div class="chk"><input type="checkbox" id="terrOn" checked/><label for="terrOn">Show service-territory footprint</label></div>
         <div id="legendTerr"></div>
-        <div class="hint">Each active utility's served area is tinted in <b>its own color</b> (clipped to the selected state) so utilities are visually distinguishable; the navy state border is the <b>hard analysis boundary</b> — capacity, substations, and candidate sites are clipped to it, and nothing outside the state is shown. The checkbox toggles the colored footprints/border; the data clip stays applied regardless.</div>
+        <div class="hint">Each active utility's served area is tinted in <b>its own color</b> (clipped to Ohio) so utilities are visually distinguishable; the navy Ohio border is the <b>hard analysis boundary</b> — capacity, substations, and candidate sites are clipped to it, and nothing outside Ohio is shown. The checkbox toggles the colored footprints/border; the data clip stays applied regardless.</div>
 
         <h2 class="sec">Substations</h2>
         <div class="chk"><input type="checkbox" id="subOn" checked/><label for="subOn">Show substations (within service territory)</label></div>
@@ -138,7 +135,7 @@
         <input type="range" id="subKv" min="0" max="500" step="5" value="0" style="width:100%"/>
         <div id="legendSub"></div>
         <button class="act ghost" id="subExportBtn" style="margin-top:6px">Export substations (Excel)</button>
-        <div class="hint">Substations come from <b>HIFLD</b> (California), classed by max kV. Transmission-scale (&ge;115 kV) are always shown; lower-voltage points are filtered to the active service territory.</div>
+        <div class="hint">Substations come from <b>HIFLD + OSM, &ge;115 kV always shown, clipped to Ohio.</b> The two sources are merged and <b>de-duplicated</b> (OSM within 200 m of a HIFLD/OSM substation is dropped) so each physical yard is counted once. Transmission-scale (&ge;115 kV) are always shown; lower-voltage points are filtered to the active service territory. Utility substations are merged into the same layer (same marker); their popup adds the published available-capacity breakdown.</div>
 
         <h2 class="sec">Transmission lines</h2>
         <div class="chk"><input type="checkbox" id="txOn"/><label for="txOn">Show transmission lines (In Service)</label></div>
@@ -154,20 +151,31 @@
           <option value="na">Unknown kV</option>
         </select>
         <div id="legendTx"></div>
-        <div class="hint">Every In-Service transmission line within California — <b>all utilities</b> — drawn with real line geometry and colored by kV class (HIFLD). Click a line for details.</div>
+        <div class="hint">Every In-Service transmission line within Ohio — <b>all utilities</b> — drawn with real line geometry and colored by kV class. Click a line for details.</div>
         <div class="muted small" id="txCount"></div>
 
         <h2 class="sec">Candidate sites</h2>
-        <div class="chk"><input type="checkbox" id="schoolOn"/><label for="schoolOn">Show all NCES schools (California)</label></div>
+        <div class="chk"><input type="checkbox" id="schoolOn"/><label for="schoolOn">Show all schools (Ohio preview)</label></div>
         <button class="act ghost" id="loadSchoolsBtn">Load in-territory schools as candidate sites</button>
         <div class="hint">Schools are the demand-side site universe: large, distributed, already-served parcels. Only schools inside the active service territory (where capacity data exists) are shown/loaded.</div>
+        <button class="act ghost" id="loadIndSitesBtn">Load industrial land as candidate sites</button>
+        <div class="hint">Loads the centroid of each large industrial / vacant land parcel into the candidate-site list so Find/analyze treats them as sites.</div>
 
         <h2 class="sec">Context (informational)</h2>
-        <div class="chk"><input type="checkbox" id="dacOn"/><label for="dacOn">Show disadvantaged / environmental-justice communities</label></div>
-        <div class="hint"><b>CalEnviroScreen 4.0</b> top-quartile burdened census tracts (CalEPA/OEHHA), plus federal CEJST/Justice40 disadvantaged tracts. Context only (not used in site matching).</div>
+        <div class="chk"><input type="checkbox" id="dacOn"/><label for="dacOn">Show Disadvantaged / Environmental-Justice communities (battery-incentive zones)</label></div>
+        <div class="hint">Federal <b>CEJST / Justice40</b> disadvantaged tracts, clipped to Ohio. Context only (not used in site matching).</div>
         <div class="chk" style="display:none"><input type="checkbox" id="zoneOn"/><label for="zoneOn">Zoning</label></div>
         <div class="chk" style="display:none"><input type="checkbox" id="wcZoneOn"/><label for="wcZoneOn">Zoning (alt)</label></div>
-        <div class="chk" style="display:none"><input type="checkbox" id="indOn"/><label for="indOn">Show industrial-classed parcels</label></div>
+        <div class="chk"><input type="checkbox" id="indOn"/><label for="indOn">Show industrial-classed parcels (orange; loads in view when zoomed to ~multi-county)</label></div>
+        <div class="hint">Parcels/zones with an <b>Industrial</b> classification — a proxy for "where industry sits." <b>Ohio publishes no clean statewide industrial class or zoning (county-by-county only) — none published.</b></div>
+        <div class="chk"><input type="checkbox" id="indLandOn"/><label for="indLandOn">Show large industrial / vacant land</label></div>
+        <div class="hint">Large industrial / vacant land parcels (semi-transparent orange). Click for name, acreage and land use. Can also be loaded as candidate sites from the <b>Candidate sites</b> group above.</div>
+        <div class="chk"><input type="checkbox" id="dcOn"/><label for="dcOn">Show existing data centers</label></div>
+        <div class="hint">OSM-tagged; not exhaustive. Click a marker for name &amp; operator.</div>
+        <div class="chk"><input type="checkbox" id="ozOn"/><label for="ozOn">Show Qualified Opportunity Zones (incentive)</label></div>
+        <div class="hint">Federal Qualified Opportunity Zones (HUD) — tax-incentive tracts. Context only.</div>
+        <div class="chk"><input type="checkbox" id="feederLinesOn"/><label for="feederLinesOn">Show mapped feeder lines (OSM, capacity-aligned)</label></div>
+        <div class="hint">Real OSM distribution-line geometry, colored by available MW and carrying the <b>same capacity popup</b> as the feeders (each line inherits the hosting-capacity cell it overlaps). Coverage is partial — ~28% of feeders statewide (best in AEP/FirstEnergy metros) — so the grid cells remain the complete, authoritative basis. Build/refresh with <b>feeder_line_join.py</b>.</div>
 
         <h2 class="sec">Basemap</h2>
         <div class="hint">Use the imagery toggle at the bottom-left of the map to switch to satellite.</div>
@@ -182,7 +190,7 @@
 
         <h2 class="sec">Spatial (optional)</h2>
         <div class="chk"><input type="checkbox" id="useCenter"/><label for="useCenter">Limit to radius around a center point</label></div>
-        <div class="row"><div><label class="fld">Center lon</label><input type="number" id="ctrLon" placeholder="-119.4" step="0.0001"/></div><div><label class="fld">Center lat</label><input type="number" id="ctrLat" placeholder="36.8" step="0.0001"/></div></div>
+        <div class="row"><div><label class="fld">Center lon</label><input type="number" id="ctrLon" placeholder="-75.5" step="0.0001"/></div><div><label class="fld">Center lat</label><input type="number" id="ctrLat" placeholder="42.9" step="0.0001"/></div></div>
         <label class="fld">Search radius (mi)</label><input type="number" id="ctrRad" value="10" min="0.5" step="0.5"/>
         <div class="hint">Tip: switch to the <b>Footprint</b> tab and click the map to capture a center point.</div>
 
@@ -194,7 +202,7 @@
         <h2 class="sec">Site eligibility (optional)</h2>
         <label class="fld">Require a substation within (mi) <span class="muted">— blank = not required</span></label><input type="number" id="subElig" placeholder="not required" step="0.1"/>
         <label class="fld">Min substation headroom (MW) <span class="muted">— blank = not required</span></label><input type="number" id="subHead" placeholder="not required" step="0.1"/>
-        <div class="hint">Screens the upstream bottleneck: a site qualifies only if its nearest substation publishes <b>available headroom ≥</b> this value. Substations with no published headroom (HIFLD points) do not pass when this is set.</div>
+        <div class="hint">Screens the upstream bottleneck: a site qualifies only if its nearest substation publishes available load hosting capacity ≥ this value (AEP/AES/FirstEnergy; Duke omitted).</div>
         <label class="fld">Require a transmission line within (mi) <span class="muted">— blank = not required</span></label><input type="number" id="txElig" placeholder="not required" step="0.1"/>
         <label class="fld">Transmission voltage class</label>
         <select id="txEligClass">
@@ -213,7 +221,7 @@
           <option value="ind">Industrial only</option>
           <option value="indcom">Industrial or Commercial</option>
         </select>
-        <div class="hint">Optional land-use screen: keep only matched sites whose parcel is <b>industrial</b> (or industrial+commercial). California has no clean statewide parcel land-use service, so this screen is inactive unless a county parcel source is wired; nearest distances and capacity matching are unaffected.</div>
+        <div class="hint">Optional zoning screen by parcel land-use class (where a county parcel source publishes one): keep only matched sites whose parcel is <b>industrial</b> (or industrial+commercial). Applied after the capacity match, so it stacks with the feeder &amp; substation filters. Ohio has no statewide parcel class, so this is usually inactive.</div>
 
         <button class="act" id="runFind">Run Find</button>
         <button class="act ghost" id="clearFind">Clear filter</button>
@@ -251,7 +259,7 @@
       <!-- ============ FOOTPRINT ============ -->
       <div class="panel" id="p-foot">
         <h2 class="sec">Site footprint</h2>
-        <div class="hint">Adds <b>building area</b> (USA Structures) and <b>outdoor area</b> per site. California has no clean statewide parcel-polygon service, so footprint runs <b>building-only</b> and each result is flagged — lot area / outdoor = lot &minus; building requires a parcel source and is reported only where one is wired (never silently estimated).</div>
+        <div class="hint">Adds <b>building area</b> (USA Structures) and, where a parcel polygon is available, <b>lot area</b> and <b>outdoor area</b> (lot &minus; building). Ohio publishes no clean statewide parcel layer (county-by-county only), so lot area is generally unavailable and footprint reports building-area only.</div>
         <h2 class="sec">All loaded sites</h2>
         <label class="fld">Parallel requests <span class="muted">(lower this if a parcel server rate-limits)</span></label>
         <input type="number" id="fpParallel" value="5" min="1" max="12"/>
@@ -270,8 +278,8 @@
         <div id="footOut" class="fp muted">Click a point on the map to compute parcel area, building footprint, owner, and nearby substations.</div>
         <details style="margin-top:10px">
           <summary class="muted small" style="cursor:pointer">Advanced: where parcel data comes from</summary>
-          <div class="hint">USA Structures (buildings) is CORS-open, so footprint works with no proxy. If you later wire a county parcel host that blocks CORS, paste a Worker URL that allowlists it here; otherwise leave blank.</div>
-          <input type="text" id="proxyBase" value="" placeholder="https://your-worker.workers.dev (optional)"/>
+          <div class="hint">Ohio has no statewide parcel service. If you proxy county parcel hosts through a Worker, paste its URL (reads <code>?url=</code>). Leave empty to try direct fetch (works only for CORS-enabled hosts).</div>
+          <input type="text" id="proxyBase" value="" placeholder="https://your-worker.workers.dev"/>
         </details>
       </div>
 
@@ -285,54 +293,56 @@
 
 <script>
 /* =====================================================================
-   NEW YORK 5-UTILITY HOSTING CAPACITY + SITING — Dominion-faithful build
-   Light theme, ArcGIS JS 4.30. Live FeatureServer data (verified June 2026).
+   OHIO 4-UTILITY HOSTING CAPACITY + SITING — adapted from the Mid-Atlantic build.
+   Light theme, ArcGIS JS 4.30. Pre-baked local GeoJSON data (./data/*.geojson).
+   Utilities: AEP Ohio, FirstEnergy, AES Ohio, Duke Energy Ohio.
    ===================================================================== */
-var SCE_ICA="https://services5.arcgis.com/z6hI6KRjKHvhNO0r/arcgis/rest/services/ICA_Layer/FeatureServer";
-var LADWP="https://services7.arcgis.com/ZzOj15zjzIfDG8aL/arcgis/rest/services/PowerCapacity/FeatureServer";
-
-/* California per-utility config. Capacity is BAKED to GeoJSON (see BAKED below); each metric resolves
-   value/voltage/feeder from candidate arrays (first present field wins) against the baked properties
-   v_load / v_stor / fid / volt. Live url kept only as a 404 fallback. */
+/* per-utility config: each metric -> {url, value[], volt[], feeder[], scale, ...} (first present field wins).
+   OHIO build: data is PRE-BAKED local GeoJSON (./data/*.geojson). Each capacity feature carries fid (circuit id),
+   v (MW value), volt (kV). value:["v"], feeder:["fid"], volt:["volt"]; dissolved-feeder polygons; id join. */
 var TERRITORY={
-  view:{center:[-119.4,36.8],zoom:6},
-  defaultUtil:"sce", defaultMode:"both", defaultState:"CA",
+  view:{center:[-82.8,40.2],zoom:7},
+  defaultUtil:"all", defaultMode:"both", defaultState:"OH",
   utils:{
-    sce:{ name:"Southern California Edison", short:"SCE", color:[226,35,26], geom:"polyline", center:[-117.6,34.8], zoom:6,
-      load:{url:SCE_ICA+"/2",value:["v_load"],scale:1,volt:["volt"],feeder:["fid"],sub:["sub"],where:null},
-      pv:{url:SCE_ICA+"/2",value:["v_stor"],scale:1,volt:["volt"],feeder:["fid"],sub:["sub"],where:null,proxy:true},
-      stor:null, territory:SCE_ICA+"/6" },
-    ladwp:{ name:"LA Dept. of Water & Power", short:"LADWP", color:[0,139,139], geom:"polyline", center:[-118.35,34.05], zoom:10,
-      load:{url:LADWP+"/0",value:["v_load"],scale:1,volt:["volt"],feeder:["fid"],where:null},
-      pv:{url:LADWP+"/0",value:["v_stor"],scale:1,volt:["volt"],feeder:["fid"],where:null,proxy:true},
-      stor:null, territory:null },
-    pge:{ name:"Pacific Gas & Electric", short:"PG&E", color:[0,76,151], geom:"polyline", center:[-121.9,37.6], zoom:8,
-      load:{url:"https://services2.arcgis.com/mJaJSax0KPHoCNB6/arcgis/rest/services/DRPComplianceRelProd/FeatureServer/3",value:["v_load"],scale:1,volt:["volt"],feeder:["fid"],where:null},
-      pv:{url:"https://services2.arcgis.com/mJaJSax0KPHoCNB6/arcgis/rest/services/DRPComplianceRelProd/FeatureServer/3",value:["v_stor"],scale:1,volt:["volt"],feeder:["fid"],where:null,proxy:true},
-      stor:null, territory:null },
-    sdge:{ name:"San Diego Gas & Electric", short:"SDG&E", color:[0,166,81], geom:"polygon", center:[-117.0,32.9], zoom:9,
-      load:{url:"https://services.arcgis.com/S0EUI1eVapjRPS5e/arcgis/rest/services/ICA_MAP_PROD_LoadCapacityGrids_VW/FeatureServer/0",value:["v_load"],scale:1,volt:["volt"],feeder:["fid"],where:null},
-      pv:{url:"https://services.arcgis.com/S0EUI1eVapjRPS5e/arcgis/rest/services/ICA_MAP_PROD_LoadCapacityGrids_VW/FeatureServer/0",value:["v_stor"],scale:1,volt:["volt"],feeder:["fid"],where:null,proxy:true},
-      stor:null, territory:null },
-    smud:{ name:"Sacramento Municipal Utility District", short:"SMUD", color:[124,58,237], geom:"polyline", center:[-121.4,38.55], zoom:10,
-      pv:null, load:null, stor:null, territory:null, context:"PowerGEM heatmap + internal NREL PRECISE — no public feeder layer (context border)." }
+    aep:{ name:"AEP Ohio", short:"AEP Ohio", color:[74,163,255], geom:"polygon", center:[-82.9,39.96], zoom:8,
+      /* storage layer = the generation hosting-capacity layer, used as a STORAGE PROXY (popups say so) */
+      pv:{url:"data/aep_gen_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      load:{url:"data/aep_load_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      stor:null, territory:"data/aep_territory.geojson" },
+    firstenergy:{ name:"FirstEnergy (Ohio Edison / CEI / Toledo Edison)", short:"FirstEnergy", color:[54,197,212], geom:"polygon", center:[-81.5,41.3], zoom:8,
+      /* storage layer = NATIVE battery / BESS hosting capacity (NOT a proxy) */
+      pv:null,
+      load:{url:"data/firstenergy_load_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      stor:{url:"data/firstenergy_gen_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null}, territory:"data/firstenergy_territory.geojson" },
+    aes:{ name:"AES Ohio", short:"AES Ohio", color:[124,156,255], geom:"polygon", center:[-84.2,39.76], zoom:9,
+      /* storage layer = the generation hosting-capacity layer, used as a STORAGE PROXY (popups say so) */
+      pv:{url:"data/aes_gen_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      load:{url:"data/aes_load_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      stor:null, territory:"data/aes_territory.geojson" },
+    duke:{ name:"Duke Energy Ohio", short:"Duke", color:[155,227,126], geom:"polygon", center:[-84.45,39.3], zoom:9,
+      /* storage layer = the generation hosting-capacity layer, used as a STORAGE PROXY (popups say so) */
+      pv:{url:"data/duke_gen_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      load:{url:"data/duke_load_dv.geojson",value:["v"],scale:1,volt:["volt"],feeder:["fid"],where:null},
+      stor:null, territory:"data/duke_territory.geojson" }
   },
-  /* MW class breaks per metric (red=low -> green=high, Dominion ramp) */
-  breaks:{ pv:[1,3,5,10], load:[1,3,5,10], stor:[1,3,5,10], both:[1,3,6,10] },
-  schools:{ url:"https://services1.arcgis.com/Ua5sjt3LWTPigjyD/arcgis/rest/services/Public_School_Locations_Current/FeatureServer/0", where:"STATE='CA'" },
-  substations:{ url:"https://services5.arcgis.com/HDRa0B57OVrv2E1q/arcgis/rest/services/Electric_Substations/FeatureServer/0", where:"STATE='CA'", kvField:"MAX_VOLT", nameField:"NAME", stateField:"STATE", statusField:"STATUS", countyField:"COUNTY" },
-  transmission:{ url:"https://services1.arcgis.com/Hp6G80Pky0om7QvQ/arcgis/rest/services/Electric_Power_Transmission_Lines/FeatureServer/0", voltField:"VOLTAGE" },
+  /* MW class breaks per metric (red=low -> green=high). Tuned to OHIO's distribution:
+     AEP load median ~0.45 MW (p75 1.8), FirstEnergy median ~0.2 MW, AES median ~2.3,
+     Duke higher — so MA's [1,3,6,10] painted most of OH red. These spread color meaningfully. */
+  breaks:{ pv:[0.5,1,2,5], load:[0.5,1,2,5], stor:[0.5,1,2,5], both:[0.5,1,2,5] },
+  schools:{ url:"data/schools_oh.geojson", where:"1=1" },
+  substations:{ url:"data/substations_oh.geojson", where:"1=1", kvField:"MAX_VOLT", nameField:"NAME", stateField:"STATE", statusField:"STATUS", countyField:"COUNTY" },
+  transmission:{ url:"data/transmission_oh.geojson", voltField:"VOLTAGE" },
   parcels:null,
   buildings:"https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/USA_Structures_View/FeatureServer/0",
-  stateBoundary:"https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/0"
+  stateBoundary:"data/ohio_boundary.geojson"
 };
-var MA_BBOX={xmin:-124.6,ymin:32.4,xmax:-114.0,ymax:42.1};   /* California bounding box (used by inTerritory for the "all utilities" view) */
-/* ---- STATE-first filter config (California — single state) ---- */
-var STATE_UTILS={ CA:["sce","ladwp","pge","sdge","smud"] };
-var STATE_NAME={ CA:"California" };
-var STATE_VIEW={ CA:{center:[-119.4,36.8],zoom:6} };
-var curState="CA";
-var JOINMODE={sce:"id",ladwp:"id"};   /* SCE: load + PV-proxy share circuit_name (baked as fid) -> exact per-circuit id-join. LADWP has no feeder id (single value surface). */
+var MA_BBOX={xmin:-85.0,ymin:38.3,xmax:-80.5,ymax:42.4};
+/* ---- STATE-first filter config (Ohio = the single state; all four utilities active) ---- */
+var STATE_UTILS={ OH:["aep","firstenergy","aes","duke"] };
+var STATE_NAME={ OH:"Ohio" };
+var STATE_VIEW={ OH:{center:[-82.8,40.2],zoom:7} };
+var curState="OH";
+var JOINMODE={aep:"id",firstenergy:"id",aes:"id",duke:"id"};   /* dissolved feeders carry fid; load+storage is an EXACT per-feeder id join (load>=min AND storage>=min on the SAME feeder = one interconnection point) */
 var MERGE_UTILS={};
 
 /* ---- capacity ramp (red low -> green high), Dominion-style ---- */
@@ -383,27 +393,28 @@ function closestOnPaths(plon,plat,paths){ var bd=1e9,bl=plon,bt=plat;
 var $=function(id){return document.getElementById(id);};
 var view,map,S,statusEl,statusT;
 var capLayers={}, capMeta=[], subLayer, txLayer, schoolLayer, terrLayers=[], netLayer, siteLyr, glowLyr, selLyr, capClipLyr, capCfgs=[], dacLayer, dacLayerPA, zoneLayer, indLayer, wcZoneLayer;
+/* NEW baked context layers (added — all load gracefully; a missing ./data file just hides that toggle's layer) */
+var indLandLayer=null, dcLayer=null, ozLayer=null, feederLineLayer=null;
+/* substation available-capacity points loaded into memory (oh_station_capacity.geojson) — also powers the headroom Find gate */
+var STN_CAP_URL="data/oh_station_capacity.geojson", __stnCap=null, __stnCapTried=false;
+var IND_LAND_URL="data/oh_industrial_land.geojson", DC_URL="data/oh_data_centers.geojson", OZ_URL="data/oh_opportunity_zones.geojson";
 /* Equity / battery-incentive overlay: NJ Overburdened Communities (layer 19) + PA Environmental Justice Areas. Drawn together as the purple DAC overlay. */
-var DAC_NJ_URL="https://services1.arcgis.com/QWdNfRs7lkPq4g4Q/arcgis/rest/services/Overburdened_Communities_under_the_New_Jersey_Environmental_Justice_Law/FeatureServer/19";
-var DAC_PA_URL="https://services1.arcgis.com/Nifc7wlHaBPig3Q3/arcgis/rest/services/Environmental_Justice_Areas/FeatureServer/0";
-var DAC_URL=DAC_NJ_URL;   // kept for any legacy reference
+var DAC_NJ_URL=null;   // legacy region endpoint removed (Ohio build uses the local CEJST geojson)
+var DAC_PA_URL=null;   // legacy region endpoint removed (Ohio build uses the local CEJST geojson)
+var DAC_URL=null;   // kept for any legacy reference
 var ZONE_URL=null; var WC_ZONE_URL=null;   // legal-zoning toggles hidden in this build (no clean statewide repoint)
 // federal CEJST / Justice40 disadvantaged census tracts — Esri Living Atlas (national, CORS-OK, fast).
 // TC = number of CEJST burden categories met; TC>0 = identified as disadvantaged. GEOID10 first 2 digits = state FIPS.
-var CEJST_URL="https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/Justice40_Tracts_May_2022/FeatureServer/0";
+var CEJST_URL="data/cejst_oh.geojson";   // federal CEJST / Justice40 disadvantaged tracts, clipped to Ohio (baked)
 /* Per-state EJ / Disadvantaged-Community overlay: state-authoritative where it exists (NJ Overburdened, PA EJ Areas),
    else the federal CEJST disadvantaged tracts (DC, MD, DE). One purple overlay per state, context only (not in matching). */
 var EJ={
-  CA:{url:CEJST_URL, where:"TC>0 AND GEOID10 LIKE '06%'", title:"Disadvantaged Community — federal CEJST / Justice40",
-      desc:"A federal <b>Justice40 disadvantaged</b> census tract (Climate &amp; Economic Justice Screening Tool). California also publishes CalEnviroScreen 4.0 (see the baked overlay).", sub:"Tract {GEOID10} · CEJST categories met: {TC}"}
+  OH:{url:CEJST_URL, where:"1=1", title:"Disadvantaged Community — federal CEJST / Justice40",
+      desc:"A federal <b>Justice40 disadvantaged</b> census tract (Climate &amp; Economic Justice Screening Tool), clipped to Ohio.", sub:"CEJST / Justice40 disadvantaged tract"}
 };
-/* Per-state INDUSTRIAL-classed source for the orange overlay (all verified live). DE/PA have no clean statewide
-   industrial classification (county-by-county codes) -> overlay simply reports "none published" there. */
-var IND={
-  DC:{url:"https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Planning_Landuse_and_Zoning_WebMercator/MapServer/3", where:"ZONING LIKE 'PDR%'", field:"ZONING", label:"DC PDR (Production/Distribution/Repair) industrial zoning"},
-  MD:{url:"https://mdgeodata.md.gov/imap/rest/services/PlanningCadastre/MD_ParcelBoundaries/MapServer/0", where:"DESCLU LIKE '%ndust%'", field:"DESCLU", label:"MD industrial land-use parcel"},
-  NJ:{url:"https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0", where:"PROP_CLASS LIKE '4B%'", field:"PROP_CLASS", label:"NJ industrial parcel (class 4B)"}
-};
+/* Ohio publishes no clean statewide industrial class or zoning (county-by-county only) -> the industrial overlay
+   simply reports "none published" for Ohio (refreshInd() handles a missing IND[curState] gracefully). */
+var IND={};
 var util="all", mode="both", territoryMask=null, terrBboxes=[];
 var statePoly=null, _statePolyCache={};
 /* SERVICE-TERRITORY union mask: union of the active utilities' footprints (e.g. PECO = SE PA only, not all of PA).
@@ -413,8 +424,9 @@ var terrUnionMask=null, _terrUnionGen=-1, _terrUnionNeed=0, _terrUnionGot=0, _te
 /* load the selected state's polygon from the same TIGERweb States MapServer the boundary code uses (CORS-OK, SR 4326). Cached per state. */
 function loadStatePoly(st){
   if(_statePolyCache[st]) return Promise.resolve(_statePolyCache[st]);
-  var bl=new S.FeatureLayer({url:TERRITORY.stateBoundary});
-  return bl.load().then(function(){ return bl.queryFeatures({where:"STUSAB='"+st+"'",returnGeometry:true,outSpatialReference:{wkid:4326},num:5}); })
+  // OHIO: hard analysis boundary is the baked ./data/ohio_boundary.geojson polygon. Union all features into one geometry.
+  var bl=new S.GeoJSONLayer({url:TERRITORY.stateBoundary});
+  return bl.load().then(function(){ return bl.queryFeatures({where:"1=1",returnGeometry:true,outSpatialReference:{wkid:4326},num:50}); })
     .then(function(r){ var g=null; try{ var geos=(r.features||[]).map(function(f){return f.geometry;}).filter(Boolean);
         g=geos.length?(geos.length>1?S.geometryEngine.union(geos):geos[0]):null; }catch(e){ g=null; }
       if(g) _statePolyCache[st]=g; return g; })
@@ -432,6 +444,9 @@ require([
  "esri/widgets/Search","esri/widgets/Locate","esri/widgets/Home","esri/widgets/ScaleBar","esri/widgets/BasemapToggle"
 ],function(esriConfig,Map,MapView,FeatureLayer,GeoJSONLayer,GraphicsLayer,Graphic,Point,Polygon,geometryEngine,webMercatorUtils,Search,Locate,Home,ScaleBar,BasemapToggle){
   S={Map:Map,FeatureLayer:FeatureLayer,GeoJSONLayer:GeoJSONLayer,GraphicsLayer:GraphicsLayer,Graphic:Graphic,Point:Point,Polygon:Polygon,geometryEngine:geometryEngine,wm:webMercatorUtils};
+  /* OHIO: build a source layer from an options object, returning a GeoJSONLayer when the url is a local .geojson
+     (all Ohio data is baked GeoJSON) and a FeatureLayer otherwise (e.g. the national USA Structures service). */
+  S.mkSrcLayer=function(o){ if(o&&o.url&&/\.geojson(\?|$)/i.test(o.url)) return new GeoJSONLayer(o); return new FeatureLayer(o); };
   /* PRODUCTION basemap key: paste a free ArcGIS Location Platform API key (developers.arcgis.com) for reliable basemap
      access on a public site. Leave blank to keep keyless access (works today, but Esri may throttle public traffic). */
   var ARCGIS_API_KEY="";   /* <-- paste your ArcGIS API key here for production */
@@ -442,7 +457,7 @@ require([
               {minScale:75000, maxScale:0} ];        /* fine:  1:75k..fully zoomed in */
   statusEl=$("status");
   map=new Map({basemap:"gray-vector"});
-  view=new MapView({container:"map",map:map,center:STATE_VIEW.CA.center,zoom:STATE_VIEW.CA.zoom});   // open framed on California
+  view=new MapView({container:"map",map:map,center:STATE_VIEW.OH.center,zoom:STATE_VIEW.OH.zoom});   // open framed on Ohio (the only state)
   view.popupEnabled=false;
   view.when(function(){ if(view.popup){view.popup.autoOpenEnabled=false;view.popup.dockEnabled=false;} });
   // zoom-adaptive LOD: swap dense grid layers (BGE) to the right resolution only when the zoom crosses a band.
@@ -459,8 +474,8 @@ require([
   var search=new Search({view:view,popupEnabled:false,resultGraphicEnabled:false}); view.ui.add(search,"top-right");
   search.on("select-result",function(e){ if(e.result&&e.result.feature){ var g=e.result.feature.geometry; addSite(g.longitude,g.latitude,e.result.name); } });
   view.on("click",onMapClick);
-  initSubstations(); initTransmission(); initSchools();
-  selectState("CA");
+  initSubstations(); initTransmission(); initSchools(); fetchStationCap();   // preload station available-capacity for the headroom Find gate
+  loadOhioTerritories().then(function(){ selectState("OH"); }).catch(function(){ selectState("OH"); });
 });
 var terrLyr;
 function status(msg){ if(!msg){statusEl.style.display="none";return;} statusEl.textContent=msg; statusEl.style.display="block"; if(statusT)clearTimeout(statusT); }
@@ -475,15 +490,13 @@ function labelCands(cfg){ if(!cfg) return []; return (cfg.feeder||[]).concat(cfg
    A scraper (bake_midatlantic.py) writes minified raw GeoJSON FeatureCollections (EPSG:4326, full
    original property names) to baked/<name>.geojson next to index.html. We prefer these over the live
    ArcGIS service; if a baked file is absent (404 -> GeoJSONLayer.load() rejects) we fall back live. */
-var BAKED_DIR="baked/";
+var BAKED_DIR="data/";
 // [util][metricKey] -> filename keyed by STATE; grid metrics keyed by resolution (coarse/mid/fine).
 var BAKED={
-  /* SCE + LADWP capacity baked to dual-value (_dv) GeoJSON; load uses v_load, pv-proxy uses v_stor (same file). */
-  sce:{ load:{CA:"sce_dv.geojson"}, pv:{CA:"sce_dv.geojson"} },
-  ladwp:{ load:{CA:"ladwp_dv.geojson"}, pv:{CA:"ladwp_dv.geojson"} },
-  pge:{ load:{CA:"pge_dv.geojson"}, pv:{CA:"pge_dv.geojson"} },
-  sdge:{ load:{CA:"sdge_dv.geojson"}, pv:{CA:"sdge_dv.geojson"} }
-  /* smud: no public feeder data -> context border (footprint only). */
+  aep:{ load:{OH:"aep_load_dv.geojson"}, pv:{OH:"aep_gen_dv.geojson"} },   /* pv = generation hosting capacity, used as the STORAGE PROXY */
+  firstenergy:{ load:{OH:"firstenergy_load_dv.geojson"}, stor:{OH:"firstenergy_gen_dv.geojson"} },   /* stor = NATIVE battery / BESS (not a proxy) */
+  aes:{ load:{OH:"aes_load_dv.geojson"}, pv:{OH:"aes_gen_dv.geojson"} },   /* pv = generation hosting capacity, used as the STORAGE PROXY */
+  duke:{ load:{OH:"duke_load_dv.geojson"}, pv:{OH:"duke_gen_dv.geojson"} }   /* pv = generation hosting capacity, used as the STORAGE PROXY */
 };
 function bakedURL(uk, metricKey, resOrState){ var u=BAKED[uk]; if(!u) return null; var mm=u[metricKey]; if(!mm) return null;
   var f=mm[resOrState]; return f?(BAKED_DIR+f):null; }
@@ -518,20 +531,20 @@ function canMergeUtil(c){ var sc=storCfg(c); if(!c.load||!c.load.url||!sc) retur
   if((c.geom||"polyline")!=="polyline") return false;
   return labelCands(c.load).length>0 && labelCands(sc.cfg).length>0; }
 function selectState(st){
-  if(!STATE_UTILS[st]) st="CA"; curState=st;
+  if(!STATE_UTILS[st]) st="DC"; curState=st;
   _terrFillCache={};   // new state -> recompute all utility footprints
   if($("state")) $("state").value=st;
   // rebuild the utility dropdown for this state
   var sel=$("util"); if(sel){ sel.innerHTML=""; var o=document.createElement("option"); o.value="all"; o.textContent="All utilities ("+st+")"; sel.appendChild(o);
     (STATE_UTILS[st]||[]).forEach(function(uk){ var op=document.createElement("option"); op.value=uk; op.textContent=TERRITORY.utils[uk].name; sel.appendChild(op); }); }
-  util=(TERRITORY.defaultUtil&&(STATE_UTILS[st]||[]).indexOf(TERRITORY.defaultUtil)>=0)?TERRITORY.defaultUtil:"all"; if($("util")) $("util").value=util;
+  util="all"; if($("util")) $("util").value="all";
   // a state switch is a fresh scope: clear candidate sites / schools-as-sites loaded for the prior state
   try{ sites=[]; if(siteLyr) siteLyr.removeAll(); if(typeof renderSites==="function") renderSites(); }catch(e){}
   // scope shared statewide services to this state
   TERRITORY.substations.where="STATE='"+st+"'";
   TERRITORY.schools.where="STATE='"+st+"'";
   if(schoolLayer) schoolLayer.definitionExpression=TERRITORY.schools.where;
-  if($("utilHint")) $("utilHint").innerHTML="<b>"+STATE_NAME[st]+"</b> — "+(STATE_UTILS[st].length)+" utility(ies). Pick one below to narrow.";
+  if($("utilHint")) $("utilHint").innerHTML="<b>"+STATE_NAME[st]+"</b> — "+(STATE_UTILS[st].length)+" utilities. Pick one to narrow.";
   // Build capacity ONLY AFTER the camera reaches the state extent, so the LOD picker sees the wide-zoom scale
   // and loads the COARSE grid first — prevents slamming in the 37k-cell fine mesh on entry (the MD overload).
   function _drawState(){ renderCapacity();
@@ -543,14 +556,14 @@ function selectState(st){
       // transmission is clipped to the active state, so rebuild it on every state change (or clear it if toggled off)
       if($("txOn")&&$("txOn").checked){ buildTransmissionClipped(); } else if(txLayer){ map.remove(txLayer); txLayer=null; } });
     if(typeof buildDacLayer==="function" && $("dacOn") && $("dacOn").checked) buildDacLayer(); }
-  var _du=TERRITORY.utils[util]; var v=(util!=="all"&&_du&&_du.center)?{center:_du.center,zoom:_du.zoom}:(STATE_VIEW[st]||TERRITORY.view);
+  var v=STATE_VIEW[st]||TERRITORY.view;
   if(view&&v){ view.goTo({center:v.center,zoom:v.zoom}).then(_drawState).catch(_drawState); } else _drawState();
 }
 function selectUtil(u){
   if(u!=="all" && (STATE_UTILS[curState]||[]).indexOf(u)<0) return;   // keep selection within the active state
   util=u; $("util").value=u;
   var c=TERRITORY.utils[u];
-  $("utilHint").innerHTML = u==="all" ? "All five California service territories shown. Pick a utility to load its feeders." : ("<b>"+esc(c.name)+"</b> — baked ICA");
+  $("utilHint").innerHTML = u==="all" ? "All four Ohio utility territories overlaid. Find &amp; territory use the Ohio extent." : ("<b>"+esc(c.name)+"</b>");
   var dest=(u!=="all"&&c.center)?{center:c.center,zoom:c.zoom}:(function(){var sv=STATE_VIEW[curState]||TERRITORY.view;return {center:sv.center,zoom:sv.zoom};})();
   function _drawUtil(){ renderCapacity(); buildTerritory(); refreshSubsForTerritory(); }
   if(view){ view.goTo(dest).then(_drawUtil).catch(_drawUtil); } else _drawUtil();
@@ -681,13 +694,13 @@ function addBgeGrid(uk,c,m,cfg,breaks,fromPV){
   ph.__baked=true; _phLayers.push(ph); map.add(ph,1);
   ph.load().then(function(){ paint(ph); }).catch(function(){});
   // the real finest grid (slimmed baked, all-at-once); live FeatureServer fallback on 404
-  var lyr=makeCapSourceLayer(fineUrl, cfg.url, "1=1", c.name+" "+m+(fromPV?" (PV proxy)":""));
+  var lyr=makeCapSourceLayer(fineUrl, cfg.url, "1=1", c.name+" "+m+(fromPV?" (generation proxy)":""));
   var meta={util:uk,metric:m,layer:lyr,valueField:null,voltField:null,feederField:null,cfg:cfg,breaks:breaks,fromPV:fromPV,geom:"polygon",scale:cfg.scale||1,suit:!!cfg.suit,mva:!!cfg.mva};
   function wire(L){ meta.valueField=fieldOf(L.fields,cfg.value); meta.voltField=fieldOf(L.fields,cfg.volt||[]); meta.feederField=fieldOf(L.fields,labelCands(cfg)); paint(L); }
   function dropPh(){ var i=_phLayers.indexOf(ph); if(i>=0)_phLayers.splice(i,1); try{ map.remove(ph); }catch(e){} }
   lyr.load().then(function(){ wire(lyr); dropPh(); if(typeof applyStateClip==="function") applyStateClip(); }).catch(function(){
     if(lyr.__baked){ try{ map.remove(lyr); }catch(e){}
-      var live=new S.FeatureLayer({url:cfg.url,outFields:["*"],opacity:0.9,popupEnabled:false,title:c.name+" "+m});
+      var live=S.mkSrcLayer({url:cfg.url,outFields:["*"],opacity:0.9,popupEnabled:false,title:c.name+" "+m});
       meta.layer=live; capLayers[uk+"_"+m]=live; map.add(live,1);
       live.load().then(function(){ wire(live); dropPh(); if(typeof applyStateClip==="function") applyStateClip(); }).catch(function(){ dropPh(); }); }
     else dropPh();
@@ -706,7 +719,7 @@ function addCapLayer(uk,c,m){ var rc=metricCfg(c,m); if(!rc) return false; var c
     // baked grids keyed by resolution name (0=coarse,1=mid,2=fine); live grid url is the per-LOD fallback.
     var resName=LOD_RES[idx]||LOD_RES[LOD_RES.length-1];
     var gridBaked=bakedURL(uk, metricKeyFor(cfg,m,fromPV), resName);
-    var gridTitle=c.name+" "+m+(fromPV?" (PV proxy)":"");
+    var gridTitle=c.name+" "+m+(fromPV?" (generation proxy)":"");
     var lyr=makeCapSourceLayer(gridBaked, cfg.lod[idx].url, effWhere(cfg), gridTitle);
     var meta={util:uk,metric:m,layer:lyr,valueField:null,voltField:null,feederField:null,cfg:cfg,breaks:breaks,
       fromPV:fromPV,geom:"polygon",scale:scale,suit:!!cfg.suit,mva:!!cfg.mva,lodGrid:true,matchPrimary:true,lodIdx:idx};
@@ -725,7 +738,7 @@ function addCapLayer(uk,c,m){ var rc=metricCfg(c,m); if(!rc) return false; var c
     return true;
   }
   if(!cfg.url) return false;
-  var title=c.name+" "+m+(fromPV?" (PV proxy)":"");
+  var title=c.name+" "+m+(fromPV?" (generation proxy)":"");
   var where=effWhere(cfg);
   // baked-first: PRE-BAKED state-filtered GeoJSON; live FeatureLayer fallback on 404 (handled in .catch below).
   // PECO: render the baked MID grid (peco_grid_mid, ~36k 0.27mi tiles binned from the fine mesh). The LIVE full-res
@@ -743,7 +756,7 @@ function addCapLayer(uk,c,m){ var rc=metricCfg(c,m); if(!rc) return false; var c
     // baked file absent -> swap in the LIVE FeatureLayer for this metric and re-clip.
     if(!lyr.__baked||!cfg.url){ return; }
     try{ map.remove(lyr); }catch(e){}
-    var live=new S.FeatureLayer({url:cfg.url,outFields:["*"],definitionExpression:where,opacity:0.9,popupEnabled:false,title:title});
+    var live=S.mkSrcLayer({url:cfg.url,outFields:["*"],definitionExpression:where,opacity:0.9,popupEnabled:false,title:title});
     meta.layer=live; capLayers[uk+"_"+m]=live; map.add(live,1);
     live.load().then(function(){ wire(live); if(typeof applyStateClip==="function") applyStateClip(); }).catch(function(){});
   });
@@ -760,7 +773,7 @@ function addMergedLayer(uk,c){
   capMeta.push(loadMeta); capMeta.push(storMeta);
   // visible merged display on the BAKED storage geometry (fast WebGL; avoids the live 90k O&R fetch), live fallback
   var dispBaked=bakedURL(uk, metricKeyFor(sc,"stor",fromPV), curState);
-  var disp=makeCapSourceLayer(dispBaked, sc.url, effWhere(sc), c.name+" Combined (avg load+"+(fromPV?"PV proxy":"BESS")+")");
+  var disp=makeCapSourceLayer(dispBaked, sc.url, effWhere(sc), c.name+" Combined (avg load+"+(fromPV?"generation proxy":"BESS")+")");
   var dispMeta={util:uk,metric:"both",layer:disp,valueField:null,voltField:null,feederField:null,cfg:sc,breaks:TERRITORY.breaks.both,fromPV:fromPV,merged:true,loadDict:null,storDict:null,geom:geom,scale:sc.scale||1};
   capMeta.push(dispMeta); capLayers[uk+"_both"]=disp; map.add(disp,1);
   Promise.all([loadLyr.load(),storLyr.load(),disp.load()]).then(function(){
@@ -792,24 +805,16 @@ function renderCapacity(){
   _terrFillCache={};   // mode / utility selection changed -> recompute footprints from fresh capacity graphics
   clearCap();
   var us=activeUtils(), mets=metricsForMode(), added=0;
-  /* CALIFORNIA: in the "all utilities" view, render each utility's LOAD layer with the cheap class-breaks
-     renderer and SKIP the per-feeder Combined merge (groupBy + dictionary over ~85k features across four dense
-     statewide utilities is the CPU hog that froze the page). A single selected utility still gets the full
-     merged Combined line. Storage-proxy utilities with no load layer fall back to their PV layer. */
-  var allView = (util==="all");
   us.forEach(function(uk){ var c=TERRITORY.utils[uk];
     if(mode==="both"){
-      if(allView){
-        if(c.load && c.load.url){ if(addCapLayer(uk,c,"load")) added++; }
-        else if(storCfg(c)){ if(addCapLayer(uk,c,"stor")) added++; }   // PV/BESS-only utility
-        addConEdNetwork(uk,c); return;
-      }
       // Combined: LINE utilities with a shared feeder id draw ONE merged-average line ((load+storage)/2). Grid/point
       // utilities (no feeder to merge on) OVERLAY both metrics so the DER/PV-proxy or storage value still shows.
       var sCfg=storCfg(c);
       if(canMergeUtil(c)){ addMergedLayer(uk,c); added++; }
       else if(c.load && c.load.url && sCfg){ if(addCapLayer(uk,c,"load")) added++; if(addCapLayer(uk,c,"stor")) added++; }
       else if(c.load && c.load.url){ if(addCapLayer(uk,c,"load")) added++; }
+      // PV/BESS-only utilities (no Load layer, e.g. PotEd) are NOT shown in Combined — Combined requires Load. They
+      // appear only under the "BESS / PV" capacity layer.
       addConEdNetwork(uk,c); return;
     }
     mets.forEach(function(m){ if(addCapLayer(uk,c,m)) added++; });
@@ -818,7 +823,7 @@ function renderCapacity(){
   capCfgs=capMeta; bringTop(); buildCapLegend();
   applyStateClip();
   loadNYBoundary().then(function(){ clipCapacityToNY(); }).catch(function(){});
-  status(added?("Showing "+added+" capacity layer(s) · "+(mode==="both"?(allView?"Load — all utilities":"Combined"):mode.toUpperCase())+" · "+(util==="all"?"all utilities":TERRITORY.utils[util].name)):"No layer for this selection.");
+  status(added?("Showing "+added+" capacity layer(s) · "+(mode==="both"?"Combined":mode.toUpperCase())+" · "+(util==="all"?"all utilities":TERRITORY.utils[util].name)):"No layer for this selection.");
   if(findActive&&lastFind){ applyGlow(lastFind); if(qualFeeders&&qualFeeders.length) applyMergedGlow(); }
   renderClippedCapacity();
   toggleBgeSuit();   // re-assert the optional display-only BGE suitability overlay
@@ -1004,7 +1009,7 @@ function togglePecoDer(){
   if(pecoDerLayer){ map.remove(pecoDerLayer); pecoDerLayer=null; }
   if(!on||!pecoActive) return;
   var d=TERRITORY.utils.peco.der; if(!d||!d.url) return;
-  var title="PECO DER interconnection viability (display only — not MW)";
+  var title="DER interconnection viability (display only — not MW)";
   // baked-first (peco_der_pa.geojson), live FeatureServer/5 fallback
   var lyr=makeCapSourceLayer(bakedURL("peco","der","PA"), d.url, "1=1", title); lyr.opacity=0.5; lyr.minScale=0; lyr.maxScale=0;
   lyr.load().then(function(){ var vf=fieldOf(lyr.fields,d.value); if(vf) lyr.renderer=viabilityRenderer(vf); }).catch(function(){
@@ -1036,9 +1041,9 @@ function buildCapLegend(){
   var hasMva=activeUtils().some(function(uk){ var c=TERRITORY.utils[uk]; return c.load&&c.load.mva; });
   var hasSuit=activeUtils().some(function(uk){ var c=TERRITORY.utils[uk]; return c.stor&&c.stor.suit; });
   if(mode==="both"){ section("Combined — available MW (avg where load+BESS)",TERRITORY.breaks.both);
-    var note=document.createElement("div"); note.className="muted small"; note.style.marginTop="3px"; note.textContent="Each active utility shown by available MW; in Combined, Load & storage are averaged per feeder ID.";
+    var note=document.createElement("div"); note.className="muted small"; note.style.marginTop="3px"; note.textContent="Each active utility shown by available MW. FirstEnergy storage = native battery (BESS); AEP / AES / Duke storage = generation proxy.";
     host.appendChild(note);
-  } else { var MET={load:"EV / Load",stor:"Storage / BESS"+(storProxy?" (PV proxy where noted)":"")};
+  } else { var MET={load:"Load",stor:"Storage / BESS"+(storProxy?" (generation proxy where noted)":"")};
     section(MET[mode],TERRITORY.breaks[mode]||TERRITORY.breaks.load); }
   if(hasMva){ var nv=document.createElement("div"); nv.className="muted small"; nv.style.marginTop="3px"; nv.textContent="PECO values are in MVA (MVA ≈ MW for screening)."; host.appendChild(nv); }
   if(mode==="stor"&&hasSuit){ var ns=document.createElement("div"); ns.className="muted small"; ns.style.marginTop="3px"; ns.textContent="BGE storage shown as a suitability index (Low / Med / High), not MW."; host.appendChild(ns); }
@@ -1058,6 +1063,24 @@ function terrRenderer(c){
    Each active utility's served area is tinted in its own color, clipped to the active state,
    drawn BEHIND the capacity feeders, with the navy state-border outline kept on top. */
 var _terrFillCache={}, _terrGen=0;   // key = curState+"|"+uk -> clipped footprint geometry; _terrGen cancels stale async fills left over from a prior state
+/* OHIO: load each utility's service-territory polygon from ./data/<key>_territory.geojson into window.MIDATL_TERR
+   (shape {coordinates:[ [ring,...], ... ]} = MultiPolygon coords) so utilFootprint() works unchanged. Missing/optional
+   files fail gracefully (that utility simply gets no colored footprint fill). Runs once; cached on window. */
+window.MIDATL_TERR=window.MIDATL_TERR||{};
+var _ohTerrLoaded=false, _ohTerrPromise=null;
+function loadOhioTerritories(){
+  if(_ohTerrPromise) return _ohTerrPromise;
+  var keys=Object.keys(TERRITORY.utils);
+  _ohTerrPromise=Promise.all(keys.map(function(uk){
+    var url=TERRITORY.utils[uk].territory; if(!url) return Promise.resolve();
+    var gl=new S.GeoJSONLayer({url:url});
+    return gl.load().then(function(){ return gl.queryFeatures({where:"1=1",returnGeometry:true,outSpatialReference:{wkid:4326},num:500}); })
+      .then(function(r){ var coords=[]; (r.features||[]).forEach(function(f){ var g=f.geometry; if(g&&g.rings){ coords.push(g.rings); } });
+        if(coords.length) window.MIDATL_TERR[uk]={type:"MultiPolygon",coordinates:coords}; })
+      .catch(function(){ /* optional territory file absent -> no footprint fill for this utility (graceful) */ });
+  })).then(function(){ _ohTerrLoaded=true; });
+  return _ohTerrPromise;
+}
 function utilFootprint(uk){
   var key=curState+"|"+uk; if(_terrFillCache[key]!==undefined) return Promise.resolve(_terrFillCache[key]);
   if(!statePoly){ return Promise.resolve(null); }
@@ -1080,7 +1103,7 @@ function drawTerritoryFills(){
     var stale=terrLyr.graphics.items.filter(function(g){ return g.attributes&&g.attributes.__terrfill; });
     if(stale.length) terrLyr.removeMany(stale);
   }catch(e){}
-  var us=(STATE_UTILS[curState]||[]);   // CA: draw ALL utility footprints as context, not just the selected utility
+  var us=activeUtils();
   us.forEach(function(uk){
     try{
       utilFootprint(uk).then(function(geom){
@@ -1114,14 +1137,14 @@ function buildTerritory(){
   if(statePoly){
     territoryMask=statePoly;
     // reset the service-territory union for this build; drawTerritoryFills accumulates each utility's footprint into it
-    _terrUnionGen=_terrGen; _terrUnionNeed=(STATE_UTILS[curState]||[]).length; _terrUnionGot=0; _terrUnionReady=false; _terrUnionAcc=null; terrUnionMask=null;
+    _terrUnionGen=_terrGen; _terrUnionNeed=activeUtils().length; _terrUnionGot=0; _terrUnionReady=false; _terrUnionAcc=null; terrUnionMask=null;
     // per-utility colored fills sit BELOW the state-border outline (added last so it stays on top)
     drawTerritoryFills();
     // state-border outline only (navy line) — KEPT exactly as-is; no light state fill
     var sym={type:"simple-fill",color:[0,0,0,0],outline:{color:[27,42,74,0.9],width:2}};
     terrLyr.add(new S.Graphic({geometry:statePoly,symbol:sym,attributes:{__terrborder:1}}));
     // legend: one row per active utility (territory color) + the state border row
-    var us=(STATE_UTILS[curState]||[]);
+    var us=activeUtils();
     us.forEach(function(uk){ var u=TERRITORY.utils[uk]; addLegendRow($("legendTerr"),u.color,u.name+" territory"); });
     addLegendRow($("legendTerr"),[27,42,74],STATE_NAME[curState]+" border");
   }
@@ -1141,11 +1164,11 @@ function applyStateClip(){ if(!statePoly||!view) return;
   renderClippedCapacity();   // re-run true geometry clip now that statePoly / state has changed
 }
 /* clip the O&R/RECO capacity feeders to the NJ portion (REGION='RECO' already does most of this in the where clause).
-   The Mid-Atlantic boundary is the union of DC/MD/DE/NJ/PA; clipping is applied to O&R only (the cross-border utility). */
+   For Ohio every utility is in-state, so this cross-border clip path is unused (statePoly is the Ohio boundary). */
 function clipCapacityToNY(){
   // primary clip: confine ALL layers to the selected state polygon
   applyStateClip();
-  // legacy fallback: if the state polygon isn't loaded yet, clip the cross-border O&R feeders to the Mid-Atlantic union
+  // legacy fallback: if the state polygon isn't loaded yet, clip feeders to the Ohio boundary union
   if(statePoly) return;
   if(!maPoly||!view) return; capMeta.forEach(function(m){ if(!m.layer||m.util!=="oru") return;
   view.whenLayerView(m.layer).then(function(lv){ try{ lv.filter={geometry:maPoly,spatialRelationship:"intersects"}; }catch(e){} }).catch(function(){}); }); }
@@ -1183,31 +1206,43 @@ function subPopup(){ return { title:"{name}", content:function(f){ var a=f.graph
     "<tr><td>Nominal capacity</td><td>"+fmtMW(a.subcap)+" MVA</td></tr>"+
     "<tr><td colspan='2' class='muted small'>"+esc(a.headsrc||"native point")+" — no peak load published, so no headroom calc.</td></tr>"; }
   else h+="<tr><td colspan='2' class='muted small'>"+(a.native?"Headroom not published for this substation.":"No utility bank-headroom match (HIFLD has no loading data).")+"</td></tr>";
+  if(a.capUtil&&(a.util||a.load_hc!=null||a.gen_hc!=null||a.bat_hc!=null||a.total_cap!=null)){   // utility-merged point: append published available-capacity breakdown
+    h+="<tr><td class='sub' colspan='2'>UTILITY AVAILABLE HEADROOM</td></tr>"+
+      "<tr><td>Utility</td><td>"+esc(a.util||"-")+"</td></tr>"+
+      "<tr><td><b>Available load headroom (MW)</b></td><td><b>"+mwOrNP(a.load_hc)+"</b></td></tr>"+
+      "<tr><td>Available storage / gen headroom (MW)</td><td>"+mwOrNP(a.gen_hc)+"</td></tr>"+
+      "<tr><td>Available battery headroom (MW)</td><td>"+mwOrNP(a.bat_hc)+"</td></tr>"+
+      "<tr><td>Total station capacity (MW)</td><td>"+mwOrNP(a.total_cap)+"</td></tr>"; }
   return h+"</table></div>"; } }; }
 function fetchSubArray(){
   if(__subArr) return Promise.resolve(__subArr);
   var sc=TERRITORY.substations;
   // BAKED-FIRST: HIFLD + OSM distribution substations, pre-merged & de-duplicated (bake_substations_osm.py). Carries
   // CLASS (so no-voltage OSM points still read as Distribution) and SOURCE. Live HIFLD-only is the fallback on 404.
-  var bakedSubs=(typeof BAKED_DIR!=="undefined")?(BAKED_DIR+"substations_merged.geojson"):null;
+  var bakedSubs=(typeof BAKED_DIR!=="undefined")?(BAKED_DIR+"substations_oh.geojson"):null;
   function fromBaked(){
     var g=new S.GeoJSONLayer({url:bakedSubs});
     return g.load().then(function(){
       return queryAll(g,"1=1",["*"],true).then(function(feats){
         if(!feats||!feats.length) throw new Error("empty baked subs");
         __subArr=feats.map(function(f){ var a=f.attributes,gm=f.geometry,kv=+a.MAX_VOLT;
-          return {lon:gm.longitude,lat:gm.latitude,maxkv:(isNaN(kv)?null:kv),cls:(a.CLASS||subClassOf(isNaN(kv)?null:kv)),
-            name:a.NAME||"Substation",county:a.COUNTY||"",state:a.STATE||"",status:a.STATUS||"",source:a.SOURCE||"HIFLD",native:false}; });
+          // OHIO substations_oh.geojson: NAME, KV_CLASS (label), MAX_VOLT (kV), SRC. Class is derived from MAX_VOLT so it
+          // maps exactly onto SUB_COLORS buckets; KV_CLASS is used only as a fallback label where MAX_VOLT is missing.
+          var src=a.SRC||a.SOURCE||"HIFLD + OSM";
+          var isUtil=(typeof src==="string"&&src.indexOf("Utility:")===0)||(a.util!=null||a.load_hc_mw!=null);   // utility-merged point carries capacity fields
+          return {lon:gm.longitude,lat:gm.latitude,maxkv:(isNaN(kv)?null:kv),cls:(isNaN(kv)?(a.KV_CLASS||"Undetermined"):subClassOf(kv)),
+            name:a.NAME||a.station||"Substation",county:a.COUNTY||"",state:a.STATE||"OH",status:a.STATUS||"",source:src,native:false,
+            capUtil:isUtil,util:(a.util||null),load_hc:numOrNull(a.load_hc_mw),gen_hc:numOrNull(a.gen_hc_mw),bat_hc:numOrNull(a.bat_hc_mw),total_cap:numOrNull(a.total_cap_mw)}; });
         return __subArr;
       });
     });
   }
-  var live=new S.FeatureLayer({url:sc.url});
+  var live=S.mkSrcLayer({url:sc.url});
   function fromLive(){ return live.load().then(function(){
     var kvF=fieldOf(live.fields,[sc.kvField,"MAX_VOLT","VOLTAGE"]), nF=fieldOf(live.fields,[sc.nameField,"NAME"]),
         stF=fieldOf(live.fields,[sc.stateField,"STATE"]), cnF=fieldOf(live.fields,[sc.countyField,"COUNTY"]), suF=fieldOf(live.fields,[sc.statusField,"STATUS"]);
     subMeta={kvF:kvF,nF:nF};
-    return queryAll(live,(stF?stF+"='CA'":"1=1"),["*"],true).then(function(feats){
+    return queryAll(live,"1=1",["*"],true).then(function(feats){
       __subArr=feats.map(function(f){ var a=f.attributes,g=f.geometry,kv=kvF?+a[kvF]:null;
         return {lon:g.longitude,lat:g.latitude,maxkv:(isNaN(kv)?null:kv),cls:subClassOf(kv),name:nF?a[nF]:"Substation",county:cnF?a[cnF]:"",state:stF?a[stF]:"",status:suF?a[suF]:"",source:"HIFLD",native:false}; });
       return __subArr;
@@ -1220,9 +1255,10 @@ function buildSubLayer(arr){
   subClassCounts={}; subTotal=0;
   var graphics=arr.map(function(s,i){ subClassCounts[s.cls]=(subClassCounts[s.cls]||0)+1; subTotal++;
     return new S.Graphic({geometry:new S.Point({longitude:s.lon,latitude:s.lat}),attributes:{OBJECTID:i+1,name:s.name,cls:s.cls,maxkv:s.maxkv==null?-1:s.maxkv,county:s.county,state:s.state,status:s.status,
-      headroom:(s.headroom==null?null:s.headroom),subcap:(s.subcap==null?null:s.subcap),subpeak:(s.subpeak==null?null:s.subpeak),headsrc:s.headsrc||"",voltsrc:s.voltsrc||"",native:s.native?1:0}}); });
+      headroom:(s.headroom==null?null:s.headroom),subcap:(s.subcap==null?null:s.subcap),subpeak:(s.subpeak==null?null:s.subpeak),headsrc:s.headsrc||"",voltsrc:s.voltsrc||"",native:s.native?1:0,
+      capUtil:(s.capUtil?1:0),util:(s.util||""),load_hc:(s.load_hc==null?null:s.load_hc),gen_hc:(s.gen_hc==null?null:s.gen_hc),bat_hc:(s.bat_hc==null?null:s.bat_hc),total_cap:(s.total_cap==null?null:s.total_cap)}}); });
   subLayer=new S.FeatureLayer({ source:graphics, objectIdField:"OBJECTID", geometryType:"point", spatialReference:{wkid:4326}, outFields:["*"],
-    fields:[{name:"OBJECTID",type:"oid"},{name:"name",type:"string"},{name:"cls",type:"string"},{name:"maxkv",type:"double"},{name:"county",type:"string"},{name:"state",type:"string"},{name:"status",type:"string"},{name:"headroom",type:"double"},{name:"subcap",type:"double"},{name:"subpeak",type:"double"},{name:"headsrc",type:"string"},{name:"voltsrc",type:"string"},{name:"native",type:"integer"}],
+    fields:[{name:"OBJECTID",type:"oid"},{name:"name",type:"string"},{name:"cls",type:"string"},{name:"maxkv",type:"double"},{name:"county",type:"string"},{name:"state",type:"string"},{name:"status",type:"string"},{name:"headroom",type:"double"},{name:"subcap",type:"double"},{name:"subpeak",type:"double"},{name:"headsrc",type:"string"},{name:"voltsrc",type:"string"},{name:"native",type:"integer"},{name:"capUtil",type:"integer"},{name:"util",type:"string"},{name:"load_hc",type:"double"},{name:"gen_hc",type:"double"},{name:"bat_hc",type:"double"},{name:"total_cap",type:"double"}],
     renderer:{type:"unique-value",field:"cls",uniqueValueInfos:subInfos(),defaultSymbol:{type:"simple-marker",style:"square",size:5,color:[150,150,150]}},
     popupTemplate:subPopup(), popupEnabled:false, visible:$("subOn").checked });
   map.add(subLayer); bringTop(); applySubFilter(); buildSubLegend();
@@ -1254,7 +1290,7 @@ function buildSubLegend(){
     t.textContent=(selName?((subClassCounts[selName]||0)+" of "):"")+subTotal.toLocaleString()+" substations in territory"; host.appendChild(t); }
 }
 /* ---- substation/bank HEADROOM (capacity − peak), harvested from each utility's load layer, matched by bank name ----
-   Mid-Atlantic utilities publish per-feeder substation NAME (and Pepco/Delmarva/ACE a Substation_Capacity_MW) but
+   Ohio utilities publish per-feeder substation NAME but
    no published substation PEAK load, so a (cap − peak) headroom can't be derived. Headroom is therefore skipped
    region-wide and substations come from HIFLD only. Left empty (rather than removed) so the engine no-ops cleanly. */
 var SUBDATA={};
@@ -1274,7 +1310,7 @@ function attachHeadroom(arr){ arr.forEach(function(s){ var k=normSub(s.name), hr
   if(!hr&&k.length>4){ var keys=Object.keys(SUBHEADROOM); for(var i=0;i<keys.length;i++){ var kk=keys[i]; if(kk.length>4&&(kk.indexOf(k)>=0||k.indexOf(kk)>=0)){ hr=SUBHEADROOM[kk]; break; } } }
   if(hr){ s.headroom=hr.headroom; s.subcap=hr.cap; s.subpeak=hr.peak; s.headsrc=TERRITORY.utils[hr.util].name; } else { s.headroom=null; s.subcap=null; s.subpeak=null; s.headsrc=null; } }); }
 /* ---- utility-NATIVE substation point layers (real coordinates; distribution-scale) ----
-   No Mid-Atlantic IOU publishes a standalone substation point layer with capacity/peak fields in this build,
+   No Ohio IOU publishes a standalone substation point layer with capacity/peak fields in this build,
    so every utility stays on HIFLD substations. Left empty so fetchNativeSubsActive() returns nothing cleanly. */
 var NATIVE_SUBS={};
 var __nativeCache={}, __lastSubs=[];
@@ -1291,7 +1327,7 @@ function fetchNativeSubsActive(){
         return {lon:g.longitude,lat:g.latitude,name:(cfg.name&&a[cfg.name])?a[cfg.name]:"Substation",
           maxkv:(kv==null||isNaN(kv))?null:kv,cls:subClassOf((kv==null||isNaN(kv))?-1:kv),
           headroom:(head==null||isNaN(head))?null:head,subcap:(cap==null||isNaN(cap))?null:cap,subpeak:(peak==null||isNaN(peak))?null:peak,
-          native:true,util:u,headsrc:TERRITORY.utils[u].name+" (native substation layer)",county:"",state:"NY",status:""}; }).filter(Boolean);
+          native:true,util:u,headsrc:TERRITORY.utils[u].name+" (native substation layer)",county:"",state:"OH",status:""}; }).filter(Boolean);
       __nativeCache[url]=arr; return arr;
     }).catch(function(){return [];});
   })).then(function(lists){ var all=[]; lists.forEach(function(l){all=all.concat(l);}); return all; });
@@ -1309,7 +1345,7 @@ function combineSubs(hifld,native){
 function enrichNativeVoltage(native,hifld){
   if(!native||!native.length) return;
   var src=[], osm=false;
-  if(window.NY_OSM_SUBS&&window.NY_OSM_SUBS.length){ osm=true; src=window.NY_OSM_SUBS.map(function(t){return {lat:t[0],lon:t[1],maxkv:t[2]};}); }   // OpenStreetMap voltages (preferred)
+  if(window.OH_OSM_SUBS&&window.OH_OSM_SUBS.length){ osm=true; src=window.OH_OSM_SUBS.map(function(t){return {lat:t[0],lon:t[1],maxkv:t[2]};}); }   // OpenStreetMap voltages (preferred)
   else if(hifld&&hifld.length){ src=hifld.filter(function(h){return h.maxkv>0;}); }
   if(!src.length) return;
   var cell=0.02, grid={}; src.forEach(function(h){ if(h.maxkv==null||h.maxkv<=0)return; var k=Math.round(h.lon/cell)+","+Math.round(h.lat/cell); (grid[k]=grid[k]||[]).push(h); });
@@ -1329,10 +1365,10 @@ function txClassCode(kv){ if(kv==null||isNaN(kv)||kv<=0)return "na"; if(kv>=735)
 function txRendererClient(){ return {type:"unique-value",field:"cls",
   uniqueValueInfos:TX_CLASSES.map(function(c){return {value:c.code,symbol:{type:"simple-line",color:c.color,width:c.width},label:c.label};}),
   defaultSymbol:{type:"simple-line",color:[150,150,150],width:1.2}}; }
-/* union of the 5 Mid-Atlantic state polygons (FIPS: DC=11, MD=24, DE=10, NJ=34, PA=42) */
+/* the Ohio boundary polygon (baked ./data/ohio_boundary.geojson) — fallback only when statePoly hasn't loaded */
 function loadNYBoundary(){ if(maPoly) return Promise.resolve(maPoly);
-  var bl=new S.FeatureLayer({url:TERRITORY.stateBoundary});
-  return bl.load().then(function(){ return bl.queryFeatures({where:"STATE='06'",returnGeometry:true,outSpatialReference:{wkid:4326},maxAllowableOffset:0.002,num:60}); })
+  var bl=new S.GeoJSONLayer({url:TERRITORY.stateBoundary});
+  return bl.load().then(function(){ return bl.queryFeatures({where:"1=1",returnGeometry:true,outSpatialReference:{wkid:4326},maxAllowableOffset:0.002,num:60}); })
     .then(function(r){ try{ var geos=(r.features||[]).map(function(f){return f.geometry;}).filter(Boolean);
         maPoly=geos.length?(geos.length>1?S.geometryEngine.union(geos):geos[0]):null; }catch(e){ maPoly=null; } return maPoly; })
     .catch(function(){ maPoly=null; return null; }); }
@@ -1345,7 +1381,7 @@ function buildTransmissionClipped(){
     // clip to the SERVICE-TERRITORY union when it's ready (e.g. PECO = SE PA only), else the state polygon
     var clipPoly=(_terrUnionReady&&terrUnionMask)?terrUnionMask:poly;
     var clipName=(_terrUnionReady&&terrUnionMask)?"service territory":(STATE_NAME[curState]||curState)+" border";
-    var tc=TERRITORY.transmission, lyr=new S.FeatureLayer({url:tc.url});
+    var tc=TERRITORY.transmission, lyr=S.mkSrcLayer({url:tc.url});
     return lyr.load().then(function(){ var vF=fieldOf(lyr.fields,[tc.voltField,"VOLTAGE","VOLT_KV"]); txMeta={vF:"kv"};
       var all=[];
       function step(start){ return lyr.queryFeatures({geometry:clipPoly,spatialRelationship:"intersects",where:"1=1",outFields:vF?[vF]:["*"],returnGeometry:true,outSpatialReference:{wkid:4326},start:start,num:800}).then(function(r){ all=all.concat(r.features||[]); if(r.exceededTransferLimit&&r.features&&r.features.length) return step(start+r.features.length); return all; }); }
@@ -1363,7 +1399,7 @@ function buildTransmissionClipped(){
         status("Transmission clipped to the "+clipName+" ("+graphics.length.toLocaleString()+" segments).");
       });
     });
-  }).catch(function(){ status("Transmission layer unavailable — adjust TERRITORY.transmission.url."); });
+  }).catch(function(){ status("Transmission layer unavailable — check data/transmission_oh.geojson."); });
 }
 function initTransmission(){ /* built lazily when the Transmission toggle is switched on */ }
 function applyTxFilter(){ if(!txLayer)return; var c=$("txClass").value; txLayer.definitionExpression=(c==="all")?"1=1":("cls='"+c+"'"); }
@@ -1373,7 +1409,7 @@ function buildTxLegend(){ var host=$("legendTx"); host.innerHTML=""; var sel=$("
 /* ---------- schools ---------- */
 function initSchools(){
   var sc=TERRITORY.schools;
-  schoolLayer=new S.FeatureLayer({url:sc.url,title:"NCES schools",definitionExpression:sc.where,visible:false,outFields:["*"],popupEnabled:false,
+  schoolLayer=S.mkSrcLayer({url:sc.url,title:"NCES schools",definitionExpression:sc.where,visible:false,outFields:["*"],popupEnabled:false,
     renderer:{type:"simple",symbol:{type:"simple-marker",style:"diamond",size:6,color:[61,123,217,0.9],outline:{color:[255,255,255,0.8],width:0.6}}},
     popupTemplate:{title:"{NAME}",content:"{STREET}, {CITY}, {STATE} {ZIP}<br>{NMCNTY}"}});
   map.add(schoolLayer,1); bringTop();
@@ -1428,6 +1464,7 @@ function siteDetailHTML(s){
   h+="<tr><td class='sub' colspan='2'>NEAREST INFRASTRUCTURE</td></tr>";
   h+="<tr><td>Nearest substation</td><td>"+(s.subNearest&&s.subNearest.dist!=null?esc(s.subNearest.name)+" — "+miLabel(s.subNearest.dist)+(s.subNearest.headroom!=null?" · headroom "+fmtMW(s.subNearest.headroom)+" MW":""):"—")+"</td></tr>";
   h+="<tr><td>Nearest transmission</td><td>"+(s.txNearest&&s.txNearest.dist!=null?miLabel(s.txNearest.dist)+(s.txNearest.kv?(" · "+s.txNearest.kv+" kV"):""):"—")+"</td></tr>";
+  if(s.stnNearest&&s.stnNearest.station){ h+="<tr><td>Nearest station load HC</td><td>"+(s.stnNearest.load_hc!=null?("<b>"+fmtMW(s.stnNearest.load_hc)+"</b> MW"):"<span class='muted'>Not published</span>")+(s.stnNearest.dist!=null?" · "+miLabel(s.stnNearest.dist):"")+"</td></tr>"; }
   if(s.footprint){ var fp=s.footprint; h+="<tr><td class='sub' colspan='2'>FOOTPRINT</td></tr>";
     h+="<tr><td>Lot area</td><td>"+(fp.lotSqft!=null?fmtArea(fp.lotSqft):esc(fp.note||"—"))+"</td></tr>";
     if(fp.bldgSqft!=null) h+="<tr><td>Building area</td><td>"+fmtArea(fp.bldgSqft)+"</td></tr>";
@@ -1504,7 +1541,7 @@ function applyMergedGlow(){ capMeta.forEach(function(m){ if(!m.merged||!m.layer)
 /* glow substations meeting the Min substation headroom (MW) threshold, dim the rest */
 function applySubGlow(p){ if(!subLayer||!view) return;
   var on=(findActive && p && !isNaN(p.subHead));
-  var w=on?("headroom IS NOT NULL AND headroom >= "+p.subHead):null;   // ONLY substations with a published headroom value >= threshold
+  var w=on?("load_hc IS NOT NULL AND load_hc >= "+p.subHead):null;   // OH: utility substations carry available load headroom in load_hc (HIFLD/OSM publish none)
   // gold glow on qualifiers; hide everything else (no-data / transmission subs) so they can't read as glowing
   subLayer.featureEffect = on ? {filter:{where:w},includedEffect:"drop-shadow(0 0 7px #ffcc00) brightness(1.5) saturate(1.4)",excludedEffect:"opacity(0)"} : null;
   view.whenLayerView(subLayer).then(function(lv){ lv.filter = on?{where:w}:null; }).catch(function(){}); }
@@ -1568,7 +1605,7 @@ function buildMatchMeta(){
       function wireMatch(L){ meta.valueField=fieldOf(L.fields,cfg.value); meta.voltField=fieldOf(L.fields,cfg.volt||[]); meta.feederField=fieldOf(L.fields,labelCands(cfg));   // feeder OR circuit OR grid id — PSE&G keys on circuit (base_circuitid), not feeder, so use the full label set (was cfg.feeder only -> null id -> no PSE&G glow)
         if(metric==="load"&&c.opcoField&&c.opcoMatch&&fieldOf(L.fields,[c.opcoField])){ L.definitionExpression=(cfg.where&&cfg.where!=="1=1"?cfg.where+" AND ":"")+c.opcoField+" LIKE '"+c.opcoMatch+"'"; } }   // opco filter only on the shared load layer
       proms.push(lyr.load().then(function(){ wireMatch(lyr); }).catch(function(){
-        if(lyr.__baked){ var live=new S.FeatureLayer({url:cfg.url,outFields:["*"],definitionExpression:cfg.where||"1=1"}); meta.layer=live; return live.load().then(function(){ wireMatch(live); }).catch(function(){}); }
+        if(lyr.__baked){ var live=S.mkSrcLayer({url:cfg.url,outFields:["*"],definitionExpression:cfg.where||"1=1"}); meta.layer=live; return live.load().then(function(){ wireMatch(live); }).catch(function(){}); }
       }));
     });
   });
@@ -1682,7 +1719,7 @@ function matchAllSites(p){
     if(ok&&p.useCenter&&!isNaN(p.cLat)){ if(haversineMi(s.lat,s.lon,p.cLat,p.cLon)>p.cRad) ok=false; }
     if(ok&&(!isNaN(p.subElig)||!isNaN(p.subHead)||!isNaN(p.txElig))){ s.subNearest=nearestSub(s); s.txNearest=nearestTxSync(s);
       if(!isNaN(p.subElig)&&(s.subNearest.dist==null||s.subNearest.dist>p.subElig)) ok=false;
-      if(!isNaN(p.subHead)&&(s.subNearest.headroom==null||s.subNearest.headroom<p.subHead)) ok=false;
+      if(!isNaN(p.subHead)){ s.stnNearest=nearestStationHC(s); if(s.stnNearest.load_hc==null||s.stnNearest.load_hc<p.subHead) ok=false; }   // headroom gate: nearest published station load HC >= threshold
       if(!isNaN(p.txElig)&&(s.txNearest.dist==null||s.txNearest.dist>p.txElig)) ok=false; }
     s.match=ok; s.dual_qualifies=(p.load>0&&p.stor>0)?(s.dualFeeder!=null):null;
   });
@@ -1696,7 +1733,8 @@ function runFind(){
   status("Finding qualifying feeders…"); $("findSum").innerHTML="<div class='sum'>Analyzing…</div>"; $("findRes").innerHTML="";
   _findMatchDone=false;   // keep merged line feeders full-color (live layer) during analysis; switch to graphics glow when done
   sites.forEach(function(s){ s.analyzed=false; }); renderSites();   // hide stale rows while the (bounded) match runs
-  buildMatchIndex(p).then(function(){ matchAllSites(p); return applyUseFilter(p); }).then(function(){
+  var stnReady=(!isNaN(p.subHead))?fetchStationCap():Promise.resolve();   // ensure station available-capacity is loaded before the headroom gate runs
+  stnReady.then(function(){ return buildMatchIndex(p); }).then(function(){ matchAllSites(p); return applyUseFilter(p); }).then(function(){
     _findMatchDone=true;
     renderSites(); drawSites(); renderQualFeeders(); applyMergedGlow(); applySubGlow(p); renderClippedCapacity();
     var m=sites.filter(function(s){return s.match!==false;}).length;
@@ -1814,7 +1852,7 @@ function analyzeSite(s,p){
     else if(p.load>0){ if(s.load<p.load)ok=false; }
     else if(p.stor>0){ if(s.stor<p.stor)ok=false; }
     if(!isNaN(p.subElig)&&(s.subNearest.dist==null||s.subNearest.dist>p.subElig))ok=false;
-    if(!isNaN(p.subHead)&&(s.subNearest.headroom==null||s.subNearest.headroom<p.subHead))ok=false;
+    if(!isNaN(p.subHead)){ s.stnNearest=nearestStationHC(s); if(s.stnNearest.load_hc==null||s.stnNearest.load_hc<p.subHead)ok=false; }   // headroom gate: nearest published station load HC >= threshold
     if(!isNaN(p.txElig)&&(s.txNearest.dist==null||s.txNearest.dist>p.txElig))ok=false;
     s.match=ok; s.analyzed=true;
     s.dual_qualifies=(p.load>0&&p.stor>0)?(s.dualFeeder!=null):null;
@@ -1874,10 +1912,10 @@ function buildDacLayer(){
   if(dacLayerPA){ try{map.remove(dacLayerPA);}catch(e){} dacLayerPA=null; }
   if(!on || !cfg) return;   // toggle off, or no EJ source for this state
   var dacSym={type:"simple-fill",color:[148,0,211,0.18],outline:{color:[120,0,160,0.85],width:0.8}};
-  dacLayer=new S.FeatureLayer({ url:cfg.url, outFields:["*"], opacity:0.9, visible:true, definitionExpression:cfg.where||"1=1",
+  dacLayer=S.mkSrcLayer({ url:cfg.url, outFields:["*"], opacity:0.9, visible:true, definitionExpression:cfg.where||"1=1",
     renderer:{type:"simple",symbol:dacSym},
     popupTemplate:{title:cfg.title, content:"<div class='fp'>"+cfg.desc+"<br><span class='muted'>"+(cfg.sub||"")+"</span></div>"} });
-  map.add(dacLayer); map.reorder(dacLayer,0); bringTop();   // sit at the bottom so feeders/markers stay on top
+  map.add(dacLayer); bringTop();   // OH: keep above the opaque capacity grids (translucent overlay) so it stays visible
 }
 function buildZoneLayer(){
   if(zoneLayer){ zoneLayer.visible=$("zoneOn").checked; return; }
@@ -1889,11 +1927,11 @@ function buildZoneLayer(){
         {value:"C",symbol:zf([80,120,205,0.22],[40,70,150]),label:"Commercial"},
         {value:"M",symbol:zf([210,90,60,0.32],[150,45,25]),label:"Manufacturing / Industrial"}],
       defaultSymbol:zf([155,155,155,0.15],[120,120,120]),defaultLabel:"Other / special"},
-    popupTemplate:{title:"NYC zoning: {ZONEDIST}",content:"<div class='fp'>NYC Dept of City Planning zoning district <b>{ZONEDIST}</b>.<br><span class='muted'>R = residential · C = commercial · M = manufacturing/industrial.</span></div>"} });
+    popupTemplate:{title:"Zoning: {ZONEDIST}",content:"<div class='fp'>Zoning district <b>{ZONEDIST}</b>.<br><span class='muted'>R = residential · C = commercial · M = manufacturing/industrial.</span></div>"} });
   map.add(zoneLayer); map.reorder(zoneLayer,1); bringTop();
 }
-/* Westchester County composite zoning (all 43 municipalities). Municipal district codes vary, so we color by the
-   county's generalized description (GENZDESC) classified into R / C / M / Open space. AGOL host => CORS-safe FeatureLayer. */
+/* DEAD in the Ohio build (WC_ZONE_URL is null, toggle is a no-op). Kept for structural parity with the source.
+   Generalized-zoning classifier by GENZDESC into R / C / M / Open space. */
 function buildWcZoneLayer(){
   if(wcZoneLayer){ wcZoneLayer.visible=$("wcZoneOn").checked; return; }
   function zf(fill,ln){ return {type:"simple-fill",color:fill,outline:{color:ln,width:0.6}}; }
@@ -1911,11 +1949,11 @@ function buildWcZoneLayer(){
         {value:"M",symbol:zf([210,90,60,0.32],[150,45,25]),label:"Manufacturing / industrial"},
         {value:"O",symbol:zf([150,170,90,0.20],[100,120,50]),label:"Parks / recreation / open space"}],
       defaultSymbol:zf([155,155,155,0.15],[120,120,120]),defaultLabel:"Other / mixed / unzoned"},
-    popupTemplate:{title:"Westchester zoning: {ZONING}",content:"<div class='fp'><b>{ZONE_NAME}</b><br>General class: {GENZDESC}<br><span class='muted'>Municipality code: {MUN} &middot; composite of all 43 municipalities (general reference; verify locally)</span></div>"} });
+    popupTemplate:{title:"Zoning: {ZONING}",content:"<div class='fp'><b>{ZONE_NAME}</b><br>General class: {GENZDESC}<br><span class='muted'>Municipality code: {MUN}</span></div>"} });
   map.add(wcZoneLayer); map.reorder(wcZoneLayer,1); bringTop();
 }
-/* Industrial-parcel overlay: the NYS parcel host has no CORS, so a direct FeatureLayer fails. Instead we query
-   industrial parcels (PROP_CLASS 7xx) in the current view through the footprint Worker proxy and draw graphics,
+/* Industrial-parcel overlay: where a county parcel host has no CORS, a direct FeatureLayer fails. Instead we query
+   industrial parcels in the current view through the footprint Worker proxy and draw graphics,
    refreshing on pan/zoom (only when zoomed in past county level). */
 var indBusy=false, indWatch=false, IND_SCALE=2500000, IND_CAP=5000;
 function buildIndLayer(){
@@ -2015,12 +2053,12 @@ function openCapPopup(hit,pt){ var lyr=hit.graphic.layer, meta=capMeta.filter(fu
     h+="<tr><td>"+(isGrid?(multi?"Feeder capacity (best in tile)":"Feeder available capacity"):"Load capacity")+"</td><td>"+(loadMeta?("<b>"+fmtMW(lv)+"</b>"+loadUnit):"<span class='muted'>not published / not shown</span>")+"</td></tr>";
     if(multi&&ci.vmin!=null&&!isNaN(ci.vmin)) h+="<tr><td>Feeder capacity (worst in tile)</td><td>"+fmtMW(ci.vmin)+" MW</td></tr>";
     if(subMW!=null) h+="<tr><td>Substation headroom</td><td><b>"+fmtMW(subMW)+"</b> MW</td></tr>";
-    h+="<tr><td>Storage / BESS capacity</td><td>"+(storMeta?("<b>"+fmtMW(sv)+"</b> MW"+(storMeta.fromPV?" <span class='muted'>(PV proxy)</span>":"")):"<span class='muted'>not published / not shown</span>")+"</td></tr>";
+    h+="<tr><td>Storage / BESS capacity</td><td>"+(storMeta?("<b>"+fmtMW(sv)+"</b> MW"+(storMeta.fromPV?" <span class='muted'>(generation proxy)</span>":"")):"<span class='muted'>not published / not shown</span>")+"</td></tr>";
     if(meta.voltField&&at[meta.voltField]!=null) h+="<tr><td>Voltage</td><td>"+at[meta.voltField]+" kV</td></tr>";
     h+="<tr><td>Utility</td><td>"+esc(TERRITORY.utils[uk].name)+"</td></tr></table>";
     if(uk==="bge") h+="<div class='hint'>BGE publishes capacity as 1/16-mi grid tiles (no feeder geometry). A 1-circuit tile is exact; a 2-circuit tile names both circuits; 3+ shows the circuit-id range. BGE only publishes each tile's <b>best</b> and <b>worst</b> feeder value, not which value belongs to which circuit.</div>";
     if(loadMeta&&loadMeta.mva) h+="<div class='hint'>PECO publishes net available capacity in <b>MVA</b> (MVA ≈ MW for screening).</div>";
-    if(storMeta&&storMeta.fromPV) h+="<div class='hint' style='color:#b06a00'>⚠ Storage values come from the PV/DER hosting dataset (no published BESS layer).</div>";
+    if(storMeta&&storMeta.fromPV) h+="<div class='hint' style='color:#b06a00'>⚠ Storage values come from the generation hosting-capacity dataset, used as a proxy (no published BESS layer for this utility). FirstEnergy publishes a native battery/BESS layer; AEP / AES / Duke do not.</div>";
     h+="</div>";
     view.popup.open({title:isGrid?"Capacity at this tile":"Capacity at this feeder",location:pt,content:h});
   }); }
@@ -2056,10 +2094,10 @@ function openCapPopupAt(uk,pt){
     var loadUnit=(loadMeta&&loadMeta.mva)?" MVA":" MW";
     var h="<div class='fp'><table class='fp'>";
     h+="<tr><td>Load capacity</td><td>"+(loadMeta?("<b>"+fmtMW(lv)+"</b>"+loadUnit):"<span class='muted'>not published / not shown</span>")+"</td></tr>";
-    h+="<tr><td>Storage / BESS capacity</td><td>"+(storMeta?("<b>"+fmtMW(sv)+"</b> MW"+(storMeta.fromPV?" <span class='muted'>(PV proxy)</span>":"")):"<span class='muted'>not published / not shown</span>")+"</td></tr>";
+    h+="<tr><td>Storage / BESS capacity</td><td>"+(storMeta?("<b>"+fmtMW(sv)+"</b> MW"+(storMeta.fromPV?" <span class='muted'>(generation proxy)</span>":"")):"<span class='muted'>not published / not shown</span>")+"</td></tr>";
     h+="<tr><td>Utility</td><td>"+esc(TERRITORY.utils[uk].name)+"</td></tr></table>";
     if(loadMeta&&loadMeta.mva) h+="<div class='hint'>PECO publishes net available capacity in <b>MVA</b> (MVA ≈ MW for screening).</div>";
-    if(storMeta&&storMeta.fromPV) h+="<div class='hint' style='color:#b06a00'>⚠ Storage values for this utility come from the PV/generation dataset (no published BESS layer).</div>";
+    if(storMeta&&storMeta.fromPV) h+="<div class='hint' style='color:#b06a00'>⚠ Storage values for this utility come from the generation hosting-capacity dataset, used as a proxy (no published BESS layer). FirstEnergy publishes a native battery/BESS layer; AEP / AES / Duke do not.</div>";
     h+="</div>";
     view.popup.open({title:"Capacity at this feeder",location:pt,content:h});
   }).catch(function(){}); }
@@ -2078,41 +2116,19 @@ function fmtArea(sq){ if(sq==null||isNaN(sq)) return "—"; return Math.round(sq
 function ownerOf(a){ return a.PRIMARY_OWNER||a.OWNER_NAME||a.OWNER||a.PRIMARY_OWNER_NAME||a.OWNERNME1||a.PRIME_OWNER||""; }
 function acToSqft(a){ return a*43560; }
 /* ----- parcel polygon sources (tiered) -----
-   Tier 1: NYS_Tax_Parcels_Public layer 1 (statewide polygons incl. NYC via MapPLUTO; CALC_ACRES).
-   Tier 2: NYC DCP MapPLUTO polygons (LotArea, sqft) — fallback where NYS layer returns nothing.
+   (legacy tier notes removed — Ohio has no statewide parcel layer; footprint is building-area only.)
    Tier 3: parcel CENTROID + radius-circle building estimate (footCentroid) — last resort. */
 function mkPoly(rings){ return new S.Polygon({rings:rings,spatialReference:{wkid:4326}}); }
 function polyAreaSqft(g){ try{ var a=S.geometryEngine.geodesicArea(g,"square-feet"); if(a&&isFinite(a)) return Math.abs(a); }catch(e){} return (g&&g.rings)?ringAreaSqft(g.rings):0; }
-/* ----- per-state Mid-Atlantic parcel sources (§G of the playbook) -----
+/* ----- parcel sources -----  Ohio has no statewide parcel layer; PARCELS is empty so footprint is building-area only.
    Each state hosts parcels on its own (mostly on-prem) server -> fetched through the Worker proxy (px). LOT AREA is
    computed from the returned polygon GEOMETRY (geodesic), so it populates regardless of each host's area field names;
    OWNER + USE-CLASS are best-effort via per-state field candidates. PA = county-by-county (no statewide) -> none.
    NOTE: endpoints/fields are from the playbook and should be re-verified live (?f=json); area works either way. */
-var POLY_NYS="https://gisservices.its.ny.gov/arcgis/rest/services/NYS_Tax_Parcels_Public/FeatureServer/1", POLY_PLUTO="https://services5.arcgis.com/GfwWNkhOj9bNBqoJ/arcgis/rest/services/MAPPLUTO/FeatureServer/0";   // legacy NY hosts retained only for the (NY-only) industrial-overlay path; Mid-Atlantic footprint uses PARCELS
-var PARCELS={
-  /* field names VERIFIED live 2026-06-25 (?f=json). Queries request outFields=* and pick owner/class client-side, so
-     a missing field is just blank (never an "invalid field" query error). */
-  DC:{ url:"https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Property_and_Land_WebMercator/MapServer/40",
-       owner:["OWNERNAME"], addr:["PREMISEADD"],
-       classUrl:"https://maps2.dcgis.dc.gov/dcgis/rest/services/DCGIS_DATA/Planning_Landuse_and_Zoning_WebMercator/MapServer/3", classField:"ZONING", indRe:/^PDR/i },
-  MD:{ url:"https://mdgeodata.md.gov/imap/rest/services/PlanningCadastre/MD_ParcelBoundaries/MapServer/0",   /* geodata.md.gov DEPRECATED -> mdgeodata.md.gov */
-       owner:[], addr:["ADDRESS"], classField:"DESCLU", luField:"LU", indRe:/indust/i },   /* MD parcels carry no owner NAME (SDAT); DESCLU = land-use description */
-  DE:{ url:"https://enterprise.firstmap.delaware.gov/arcgis/rest/services/PlanningCadastre/DE_StateParcels/MapServer/0",
-       owner:[], addr:[] },   /* DE parcels: PIN/ACRES/COUNTY only — lot area from geometry, no owner/class */
-  NJ:{ url:"https://maps.nj.gov/arcgis/rest/services/Framework/Cadastral/MapServer/0",
-       owner:["OWNER_NAME"], addr:["PROP_LOC"], classField:"PROP_CLASS", indRe:/^4B/ },
-  /* PA has NO statewide parcel layer -> route county-by-county. Each click is tested against every county service in
-     parallel; the one whose polygon contains the point answers (others return nothing). Lot area comes from the polygon
-     geometry, so any county with a live polygon service works even without owner/use-class fields. Add more counties by
-     appending {name,url,...}; a wrong/dead url just returns null and is ignored (graceful). Philadelphia VERIFIED live. */
-  PA:{ counties:[   /* the 5 PECO counties — all VERIFIED live 2026-06-25 (point query returns a parcel polygon). Lot area from geometry. */
-    { name:"Philadelphia", url:"https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/DOR_Parcel/FeatureServer/0", owner:[], addr:["addr_std"] },
-    { name:"Montgomery",   url:"https://gis.montcopa.org/arcgis/rest/services/Parcels/Montgomery_County_Parcels/MapServer/10", owner:[], addr:[] },   /* TAXPIN/CALCACREAGE only */
-    { name:"Delaware",     url:"https://gis.delcopa.gov/arcgis/rest/services/AssessmentViewers/Parcels/MapServer/0", owner:[], addr:[] },   /* PIN/CALCULATEDACREAGE only */
-    { name:"Chester",      url:"https://mapservices.pasda.psu.edu/server/rest/services/pasda/ChesterCounty/MapServer/11", owner:["OWN1"], addr:["LOC_ADDRES"] },   /* PASDA-hosted Chester parcels 202312 */
-    { name:"Bucks",        url:"https://mapservices.pasda.psu.edu/server/rest/services/pasda/BucksCounty/MapServer/17", owner:["OWNER1"], addr:["ADDRESS"] }   /* PASDA-hosted Bucks parcels 202605 */
-  ] }
-};
+var POLY_NYS=null, POLY_PLUTO=null;   // legacy NY parcel hosts removed (Ohio build)
+/* Ohio publishes no clean statewide parcel layer (county-by-county only), so footprint lot-area lookups have no
+   statewide source. parcelCfg() returns {url:null} -> the footprint engine reports building-area only (graceful). */
+var PARCELS={};
 function parcelCfg(){ return PARCELS[curState]||{url:null}; }
 function firstField(a,cands){ for(var i=0;i<(cands||[]).length;i++){ var v=a[cands[i]]; if(v!=null&&v!=="") return v; } return ""; }
 /* per-state use-class -> {code,cat}; cat vocab matches applyUseFilter (Industrial / Commercial / Other) */
@@ -2159,7 +2175,7 @@ function parcelPolygon(lon,lat){ var cfg=parcelCfg();
       return {lotSqft:polyAreaSqft(poly),poly:poly,owner:""+firstField(a,cfg.owner),addr:""+firstField(a,cfg.addr),parcelId:"",useClass:(cfg.classUrl?null:classCat(cfg,a)),source:curState+" parcel polygon"}; }
     return null; }).catch(function(){ return null; });
 }
-/* whole-property (polygon): union same-owner NYS parcels within 0.5 mi */
+/* whole-property (polygon): union same-owner parcels within 0.5 mi (where a county parcel source exists) */
 function wholePropertyPoly(lon,lat,p){
   var cfg=parcelCfg(); if(!cfg.url||!p.owner) return Promise.resolve(p);
   var q=cfg.url+"/query?geometry="+lon+","+lat+"&geometryType=esriGeometryPoint&inSR=4326&distance=0.5&units=esriSRUnit_StatuteMile&spatialRel=esriSpatialRelIntersects&outFields="+encodeURIComponent((cfg.owner||[]).join(","))+"&returnGeometry=true&outSR=4326&f=json";
@@ -2211,7 +2227,7 @@ function footOne(s){
     });
   }).catch(function(){ s.footprint={note:"parcel lookup error (proxy/CORS — set the Worker URL?)",lotSqft:null,bldgSqft:null,outdoorSqft:null,owner:"",source:"error"}; });
 }
-/* TIER 3 (legacy NY; unused in the Mid-Atlantic build — kept dead for reference) — centroid acreage estimate */
+/* TIER 3 (legacy; unused in the Ohio build — kept dead for reference) — centroid acreage estimate */
 function footCentroid(s){
   var q=TERRITORY.parcels+"/query?geometry="+s.lon+","+s.lat+"&geometryType=esriGeometryPoint&inSR=4326&distance=0.35&units=esriSRUnit_StatuteMile&spatialRel=esriSpatialRelIntersects&outFields=CALC_ACRES,ACRES,SQ_FT,PRIMARY_OWNER,PARCEL_ADDR,PRINT_KEY&returnGeometry=true&outSR=4326&f=json";
   return pxFetch(q).then(function(x){return x.json();}).then(function(r){
@@ -2294,16 +2310,16 @@ function dl(blob,name){var a=document.createElement("a");a.href=URL.createObject
 function exportSites(){ var rows=[["Name","Lon","Lat","Load MW","Storage MW","Same-feeder","Feeder ID","Feeder load MW","Feeder stor MW","Network RemainingMW","Nearest Sub (mi)","Sub headroom MW","Nearest Tx (mi)","Tx kV","Match"]];
   var list=findActive?sites.filter(function(s){return s.match!==false;}):sites;
   list.forEach(function(s){ rows.push([s.name,s.lon,s.lat,s.load||0,s.stor||0,(s.dualFeeder?"yes":"no"),(s.dualFeeder?s.dualFeeder.id:""),(s.dualFeeder?s.dualFeeder.load:""),(s.dualFeeder?s.dualFeeder.stor:""),s.network==null?"":s.network,s.subNearest&&s.subNearest.dist!=null?round2(s.subNearest.dist):"",(s.subNearest&&s.subNearest.headroom!=null?round2(s.subNearest.headroom):""),s.txNearest&&s.txNearest.dist!=null?round2(s.txNearest.dist):"",s.txNearest&&s.txNearest.kv?s.txNearest.kv:"",s.match!==false?"yes":"no"]); });
-  downloadXlsx("midatlantic_sites_analysis.xlsx",rows); }
+  downloadXlsx("ohio_sites_analysis.xlsx",rows); }
 function exportSubs(){ var arr=(__lastSubs&&__lastSubs.length)?__lastSubs:(__subArr||[]); if(!arr.length){status("Show substations first.");return;}
   var rows=[["Name","Source","Classification","Max kV","Bank capacity (MVA)","Peak load (MW)","Headroom (MW)","County","State","Status","Lat","Lon"]];
   arr.forEach(function(s){ rows.push([s.name,(s.native?"utility-native":"HIFLD"),s.cls,s.maxkv==null?"":s.maxkv,s.subcap==null?"":s.subcap,s.subpeak==null?"":s.subpeak,s.headroom==null?"":round2(s.headroom),s.county,s.state,s.status,round2(s.lat),round2(s.lon)]); });
-  downloadXlsx("midatlantic_substations.xlsx",rows); }
+  downloadXlsx("ohio_substations.xlsx",rows); }
 function footExport(){ var rows=[["Name","Lon","Lat","Parcel","Lot sqft","Lot acres","Building sqft","Outdoor sqft","Owner","Load MW","Storage MW"]];
   sites.forEach(function(s){ var fp=s.footprint||{}; rows.push([s.name,s.lon,s.lat,fp.note||"",fp.lotSqft!=null?Math.round(fp.lotSqft):"",fp.lotSqft!=null?round2(fp.lotSqft/43560):"",fp.bldgSqft!=null?Math.round(fp.bldgSqft):"",fp.outdoorSqft!=null?Math.round(fp.outdoorSqft):"",fp.owner||"",s.load||0,s.stor||0]); });
-  downloadXlsx("midatlantic_footprint.xlsx",rows); }
-function saveJson(){ dl(new Blob([JSON.stringify({sites:sites,captured:captured,when:new Date().toISOString()},null,2)],{type:"application/json"}),"midatlantic_session.json"); }
-function saveHtml(){ dl(new Blob([document.documentElement.outerHTML],{type:"text/html"}),"california_capacity_map_standalone.html"); }
+  downloadXlsx("ohio_footprint.xlsx",rows); }
+function saveJson(){ dl(new Blob([JSON.stringify({sites:sites,captured:captured,when:new Date().toISOString()},null,2)],{type:"application/json"}),"ohio_session.json"); }
+function saveHtml(){ dl(new Blob([document.documentElement.outerHTML],{type:"text/html"}),"ohio_capacity_map_standalone.html"); }
 
 /* ---------- upload ---------- */
 function handleUpload(file){ var ext=file.name.split(".").pop().toLowerCase(),fr=new FileReader();
@@ -2320,12 +2336,122 @@ function logCapture(pt){ captured.push({t:new Date().toISOString(),lon:round2(pt
   glowLyr.add(new S.Graphic({geometry:new S.Point({longitude:pt.longitude,latitude:pt.latitude}),symbol:{type:"simple-marker",style:"circle",size:9,color:[255,140,0,0.9],outline:{color:[255,255,255],width:1.5}}}));
   $("capList").innerHTML=captured.slice(-8).map(function(c){return c.t.slice(11,19)+" · "+c.lat+", "+c.lon;}).join("<br>")+"<br><span class='muted'>"+captured.length+" total</span>";
   $("capExport").style.display="block"; }
-function capExport(){ var rows=[["Time","Lat","Lon"]]; captured.forEach(function(c){rows.push([c.t,c.lat,c.lon]);}); downloadXlsx("midatlantic_captured_points.xlsx",rows); }
+function capExport(){ var rows=[["Time","Lat","Lon"]]; captured.forEach(function(c){rows.push([c.t,c.lat,c.lon]);}); downloadXlsx("ohio_captured_points.xlsx",rows); }
+
+/* =====================================================================
+   NEW baked context layers + substation available-capacity headroom gate.
+   All loads are wrapped so a missing ./data file just hides that toggle's
+   layer (graceful) — nothing else in the app is affected.
+   ===================================================================== */
+/* "Not published" formatter for the capacity popups (reuses fmtMW for real numbers) */
+function mwOrNP(v){ return (v==null||isNaN(+v))?"<span class='muted'>Not published</span>":("<b>"+fmtMW(v)+"</b>"); }
+
+/* ---- (1) substation available-capacity points loaded into memory (also powers the headroom Find gate) ---- */
+function fetchStationCap(){
+  if(__stnCap!=null) return Promise.resolve(__stnCap);
+  if(__stnCapTried) return Promise.resolve(__stnCap||[]);
+  __stnCapTried=true;
+  var g=new S.GeoJSONLayer({url:STN_CAP_URL});
+  return g.load().then(function(){ return queryAll(g,"1=1",["*"],true); }).then(function(feats){
+    __stnCap=(feats||[]).map(function(f){ var a=f.attributes||{}, gm=f.geometry; if(!gm||gm.longitude==null) return null;
+      return {lon:gm.longitude,lat:gm.latitude,util:a.util,station:a.station,kv:numOrNull(a.kv),
+        load_hc:numOrNull(a.load_hc_mw),gen_hc:numOrNull(a.gen_hc_mw),bat_hc:numOrNull(a.bat_hc_mw),total_cap:numOrNull(a.total_cap_mw)}; }).filter(Boolean);
+    return __stnCap;
+  }).catch(function(){ __stnCap=[]; return __stnCap; });   // missing file -> empty array, gate/layer simply inactive
+}
+/* nearest station to a site, by haversine (mirrors nearestSub) -> returns {load_hc, dist, station} */
+function nearestStationHC(s){ var set=__stnCap; if(!set||!set.length) return {load_hc:null,dist:null,station:null};
+  var nd=1e9,nn=null; set.forEach(function(x){ var d=haversineMi(s.lat,s.lon,x.lat,x.lon); if(d<nd){nd=d;nn=x;} });
+  return {load_hc:(nn?nn.load_hc:null),dist:(nd===1e9?null:nd),station:(nn?nn.station:null)}; }
+/* Utility substations are now merged into the main substations layer (data/substations_oh.geojson) with the same
+   KV-class marker; their popup adds the capacity breakdown (see subPopup). No separate display layer/legend. */
+
+/* ---- (3) large industrial / vacant land polygons (orange fill) ---- */
+function buildIndLandLayer(){
+  if(!$("indLandOn").checked){ if(indLandLayer) indLandLayer.visible=false; return; }
+  if(indLandLayer){ indLandLayer.visible=true; return; }
+  var sym={type:"simple-fill",color:[235,140,35,0.30],outline:{color:[150,75,5,0.9],width:0.8}};
+  indLandLayer=S.mkSrcLayer({ url:IND_LAND_URL, outFields:["*"], opacity:0.9, visible:true,
+    renderer:{type:"simple",symbol:sym},
+    popupTemplate:{title:"{name}", content:"<div class='fp'><table class='fp'><tr><td>Acres</td><td><b>{acres}</b></td></tr><tr><td>Land use</td><td>{landuse}</td></tr></table></div>"} });
+  indLandLayer.load().then(function(){ map.add(indLandLayer); bringTop(); })
+    .catch(function(){ indLandLayer=null; if($("indLandOn")) $("indLandOn").checked=false; status("Industrial / vacant land layer not available (data/oh_industrial_land.geojson)."); });
+}
+/* load each industrial-land polygon CENTROID as a candidate site (mirrors loadSchools exactly) */
+function loadIndustrialSites(){
+  status("Loading industrial land as candidate sites…");
+  var lyr=S.mkSrcLayer({url:IND_LAND_URL});
+  lyr.load().then(function(){ return lyr.queryFeatures({where:"1=1",returnGeometry:true,outFields:["*"],outSpatialReference:{wkid:4326},num:5000}); })
+    .then(function(r){ var feats=r.features||[], n=0, skip=0;
+      feats.forEach(function(f){ var a=f.attributes||{}, g=f.geometry, c=null;
+        try{ c=g?(g.centroid||(S.geometryEngine&&S.geometryEngine.centroid?S.geometryEngine.centroid(g):null)):null; }catch(e){ c=null; }
+        if(!c||c.longitude==null) return; var lon=+c.longitude, lat=+c.latitude;
+        if(!isFinite(lon)||!isFinite(lat)) return;
+        var nm=a.name||("Industrial parcel"+(a.acres!=null?(" ("+a.acres+" ac)"):""));
+        if(inTerritory(lon,lat)){ sites.push({id:"ind"+(Date.now())+(n++),name:nm,lon:lon,lat:lat,extra:{type:"industrial",acres:a.acres,landuse:a.landuse},analyzed:false,match:true}); } else skip++; });
+      drawSites(); renderSites();
+      if(findActive&&lastFind){ status("Loaded "+n+" industrial parcels — matching against current Find…"); matchAllSites(lastFind); }
+      else status("Loaded "+n+" industrial parcels as candidate sites ("+skip+" outside territory skipped).");
+    }).catch(function(){ status("Could not load industrial land (data/oh_industrial_land.geojson)."); });
+}
+
+/* ---- (4) existing data centers (dark diamond markers) ---- */
+function buildDcLayer(){
+  if(!$("dcOn").checked){ if(dcLayer) dcLayer.visible=false; return; }
+  if(dcLayer){ dcLayer.visible=true; return; }
+  dcLayer=S.mkSrcLayer({ url:DC_URL, outFields:["*"], visible:true,
+    renderer:{type:"simple",symbol:{type:"simple-marker",style:"diamond",size:11,color:[35,40,60,0.95],outline:{color:[255,255,255,0.9],width:1}}},
+    popupTemplate:{title:"{name}", content:"<div class='fp'><table class='fp'><tr><td>Operator</td><td><b>{operator}</b></td></tr></table><div class='hint'>OSM-tagged; not exhaustive.</div></div>"} });
+  dcLayer.load().then(function(){ map.add(dcLayer); bringTop(); })
+    .catch(function(){ dcLayer=null; if($("dcOn")) $("dcOn").checked=false; status("Data-centers layer not available (data/oh_data_centers.geojson)."); });
+}
+
+/* ---- (5) Qualified Opportunity Zones (translucent teal fill, distinct from purple EJ) ---- */
+function buildOzLayer(){
+  if(!$("ozOn").checked){ if(ozLayer) ozLayer.visible=false; return; }
+  if(ozLayer){ ozLayer.visible=true; return; }
+  var sym={type:"simple-fill",color:[20,150,160,0.18],outline:{color:[10,110,120,0.85],width:0.8}};
+  ozLayer=S.mkSrcLayer({ url:OZ_URL, outFields:["*"], opacity:0.9, visible:true, popupEnabled:true,
+    renderer:{type:"simple",symbol:sym},
+    popupTemplate:{title:"Qualified Opportunity Zone", content:"<div class='fp'>Federal Qualified Opportunity Zone (HUD) — tax-incentive tract. Context only.</div>"} });
+  ozLayer.load().then(function(){ map.add(ozLayer); bringTop(); })
+    .catch(function(){ ozLayer=null; if($("ozOn")) $("ozOn").checked=false; status("Opportunity-zone layer not available (data/oh_opportunity_zones.geojson)."); });
+}
+
+/* ---- (6) OSM feeder lines aligned to hosting capacity (overlay; capacity-parity popup) ---- */
+function buildFeederLines(){
+  if(!$("feederLinesOn") || !$("feederLinesOn").checked){ if(feederLineLayer) feederLineLayer.visible=false; return; }
+  if(feederLineLayer){ feederLineLayer.visible=true; bringTop(); return; }
+  var L=function(c,w){return {type:"simple-line",color:c,width:w};};
+  feederLineLayer=S.mkSrcLayer({ url:"data/oh_feeders_joined.geojson", outFields:["*"], visible:true, popupEnabled:true,
+    renderer:{ type:"class-breaks", field:"comb_mw",
+      defaultSymbol:{type:"simple-line",color:[140,140,140,0.5],width:1,style:"short-dot"},   // unmatched: geometry only
+      classBreakInfos:[
+        {minValue:-1,maxValue:0.5,symbol:L([215,25,28],2.4)},
+        {minValue:0.5,maxValue:1,symbol:L([253,174,97],2.4)},
+        {minValue:1,maxValue:2,symbol:L([255,221,120],2.4)},
+        {minValue:2,maxValue:5,symbol:L([166,217,106],2.6)},
+        {minValue:5,maxValue:1e9,symbol:L([26,150,65],2.8)} ]},
+    popupTemplate:{ title:"Feeder line — {util}", outFields:["*"], content:function(f){ var a=f.graphic.attributes;
+      if(!a.matched){ return "<div class='fp'>Mapped feeder line (OpenStreetMap). <b>No published hosting-capacity cell here</b> — real geometry only, no value."+(a.osm_voltage?"<br>OSM voltage: "+esc(a.osm_voltage):"")+"</div>"; }
+      return "<div class='fp'><table class='fp'>"
+        +"<tr><td>Feeder</td><td><b>"+esc(a.fid||"-")+"</b></td></tr>"
+        +"<tr><td>Load capacity</td><td>"+mwOrNP(a.load_mw)+"</td></tr>"
+        +"<tr><td>Storage / BESS capacity</td><td>"+mwOrNP(a.gen_mw)+"</td></tr>"
+        +"<tr><td><b>Combined (avg)</b></td><td><b>"+mwOrNP(a.comb_mw)+"</b></td></tr>"
+        +"<tr><td>Voltage</td><td>"+((a.volt!=null&&a.volt!=="")?esc(a.volt)+" kV":"—")+"</td></tr>"
+        +"<tr><td>Utility</td><td>"+esc(a.util||"-")+"</td></tr>"
+        +"<tr><td colspan='2' class='muted small'>Real OSM line geometry; value is the aggregate hosting capacity of the grid cell it overlaps.</td></tr>"
+        +"</table></div>"; } } });
+  feederLineLayer.load().then(function(){ map.add(feederLineLayer); bringTop(); })
+    .catch(function(){ feederLineLayer=null; if($("feederLinesOn")) $("feederLinesOn").checked=false; status("Feeder-line layer not available — run feeder_line_join.py to build data/oh_feeders_joined.geojson."); });
+}
 
 /* ---------- DOM wiring ---------- */
+/* (baked context layers wired above: indLandOn, dcOn, ozOn, loadIndSitesBtn) */
 document.querySelectorAll("#tabs button").forEach(function(b){ b.onclick=function(){ document.querySelectorAll("#tabs button").forEach(function(x){x.classList.remove("on");}); document.querySelectorAll(".panel").forEach(function(x){x.classList.remove("on");}); b.classList.add("on"); $("p-"+b.dataset.tab).classList.add("on"); }; });
 document.querySelectorAll("#modeSeg button").forEach(function(b){ b.onclick=function(){ setMode(b.dataset.mode); }; });
-$("state").onchange=function(){ selectState(this.value); };
+if($("state")) $("state").onchange=function(){ selectState(this.value); };
 $("util").onchange=function(){ selectUtil(this.value); };
 $("terrOn").onchange=function(){ if(terrLyr) terrLyr.visible=$("terrOn").checked; terrLayers.forEach(function(l){l.visible=$("terrOn").checked;}); };
 $("netOn").onchange=function(){ renderCapacity(); buildCapLegend(); };
@@ -2341,6 +2467,12 @@ $("pecoDerOn").onchange=togglePecoDer;
 $("zoneOn").onchange=function(){ /* legal-zoning toggle disabled in this build (no clean repoint) */ };
 $("wcZoneOn").onchange=function(){ /* legal-zoning toggle disabled in this build (no clean repoint) */ };
 $("indOn").onchange=function(){ if($("indOn").checked) buildIndLayer(); else if(indLayer){ indLayer.removeAll(); indLayer.visible=false; } };
+/* NEW baked context layers */
+if($("indLandOn")) $("indLandOn").onchange=buildIndLandLayer;
+if($("dcOn")) $("dcOn").onchange=buildDcLayer;
+if($("ozOn")) $("ozOn").onchange=buildOzLayer;
+if($("feederLinesOn")) $("feederLinesOn").onchange=buildFeederLines;
+if($("loadIndSitesBtn")) $("loadIndSitesBtn").onclick=loadIndustrialSites;
 $("loadSchoolsBtn").onclick=loadSchools;
 $("runFind").onclick=runFind; $("clearFind").onclick=clearFindFn;
 $("addSiteBtn").onclick=function(){ addSite($("addLon").value,$("addLat").value,$("addName").value); };
@@ -2353,4 +2485,7 @@ $("capToggle").onclick=function(){ capMode=!capMode; this.textContent="Capture: 
 $("capClear").onclick=function(){ captured=[]; glowLyr.removeAll(); $("capList").textContent="No captured points yet."; };
 $("capExport").onclick=capExport;
 $("fpAnalyzeBtn").onclick=footAll; $("fpExportBtn").onclick=footExport;
-$("analyzeLast").onclick=function(){ if(captured.
+$("analyzeLast").onclick=function(){ if(captured.length){ var c=captured[captured.length-1]; footSingle({longitude:c.lon,latitude:c.lat}); } };
+</script>
+</body>
+</html>
